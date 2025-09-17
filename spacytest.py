@@ -1,459 +1,339 @@
 #!/usr/bin/env python3
 """
-Sentence-BERT Semantic Similarity Upgrade
-Better than TF-IDF for Aspire Support Chatbot
+GitHub Model Downloader
+Alternative to Hugging Face for downloading pre-trained models
 """
 
+import os
+import requests
+import zipfile
+import json
 import subprocess
 import sys
-import time
-import numpy as np
-from typing import List, Tuple, Optional
+from pathlib import Path
+import shutil
 
-def install_sentence_transformers():
-    """Install sentence-transformers library"""
+class GitHubModelDownloader:
+    """Download pre-trained models from GitHub repositories"""
     
-    print("📦 Installing Sentence-BERT (sentence-transformers)")
-    print("=" * 50)
+    def __init__(self, models_dir="./models"):
+        self.models_dir = Path(models_dir)
+        self.models_dir.mkdir(exist_ok=True)
     
-    try:
-        # Install sentence-transformers
-        result = subprocess.run([
-            sys.executable, "-m", "pip", "install", "sentence-transformers"
-        ], capture_output=True, text=True, check=True)
+    def download_file(self, url, filepath):
+        """Download a file from URL"""
+        print(f"📥 Downloading: {url}")
         
-        print("✅ Successfully installed sentence-transformers")
-        print(result.stdout)
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install sentence-transformers: {e}")
-        print(f"Error output: {e.stderr}")
-        return False
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return False
-
-def test_sentence_bert_basic():
-    """Test basic Sentence-BERT functionality"""
-    
-    print("\n🧪 Testing Basic Sentence-BERT Functionality")
-    print("=" * 50)
-    
-    try:
-        from sentence_transformers import SentenceTransformer
-        from sklearn.metrics.pairwise import cosine_similarity
-        
-        # Load a lightweight but powerful model
-        print("📥 Loading Sentence-BERT model (all-MiniLM-L6-v2)...")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-        print("✅ Model loaded successfully!")
-        
-        # Test sentences from your chatbot domain
-        test_sentences = [
-            "I need help with password reset",
-            "Can you help me reset my password?",
-            "S0C4 abend error occurred",
-            "Storage violation S0C4 happened",
-            "What is the relationship between Aspire and VTO?",
-            "How are Aspire and VTO connected?",
-            "Memory issue in production system",
-            "Production memory problem occurred",
-            "Job is running for a long time",
-            "Long running job analysis needed"
-        ]
-        
-        print(f"\n🔍 Testing with {len(test_sentences)} sentences...")
-        
-        # Generate embeddings
-        start_time = time.time()
-        embeddings = model.encode(test_sentences)
-        encoding_time = (time.time() - start_time) * 1000
-        
-        print(f"⏱️  Encoding time: {encoding_time:.2f}ms")
-        print(f"📊 Embedding shape: {embeddings.shape}")
-        print(f"🎯 Embedding dimension: {embeddings.shape[1]}")
-        
-        # Test similarity calculations
-        print(f"\n🎯 Similarity Test Results:")
-        test_pairs = [
-            (0, 1),  # password reset variations
-            (2, 3),  # S0C4 abend variations  
-            (4, 5),  # Aspire-VTO relationship variations
-            (6, 7),  # memory issue variations
-            (8, 9)   # long running job variations
-        ]
-        
-        for i, j in test_pairs:
-            similarity = cosine_similarity([embeddings[i]], [embeddings[j]])[0][0]
-            print(f"  📝 '{test_sentences[i][:40]}...'")
-            print(f"  📝 '{test_sentences[j][:40]}...'")
-            print(f"  🎯 Similarity: {similarity:.4f}")
-            print()
-        
-        return model, embeddings
-        
-    except ImportError as e:
-        print(f"❌ Import error: {e}")
-        print("Please install sentence-transformers first")
-        return None, None
-    except Exception as e:
-        print(f"❌ Error testing Sentence-BERT: {e}")
-        return None, None
-
-def compare_with_tfidf():
-    """Compare Sentence-BERT with your current TF-IDF implementation"""
-    
-    print("⚖️ Sentence-BERT vs TF-IDF Comparison")
-    print("=" * 45)
-    
-    # Test queries from your chatbot
-    queries = [
-        "password reset help",
-        "S0C4 abend error", 
-        "memory issue production",
-        "aspire vto relationship",
-        "job running long time"
-    ]
-    
-    candidates = [
-        "reset my password",
-        "forgot password", 
-        "S0C4 storage violation",
-        "abend code error",
-        "memory problem in system",
-        "production memory issue",
-        "what is relationship between aspire and vto",
-        "connection aspire vto",
-        "job is running for hours",
-        "long running job analysis"
-    ]
-    
-    try:
-        from sentence_transformers import SentenceTransformer
-        from sklearn.metrics.pairwise import cosine_similarity
-        
-        # Load Sentence-BERT model
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        print("🧪 Testing both approaches...")
-        
-        results = {}
-        
-        # Test Sentence-BERT
-        print("\n1️⃣ Sentence-BERT Results:")
-        start_time = time.time()
-        
-        # Encode all texts at once (efficient)
-        all_texts = queries + candidates
-        all_embeddings = model.encode(all_texts)
-        
-        query_embeddings = all_embeddings[:len(queries)]
-        candidate_embeddings = all_embeddings[len(queries):]
-        
-        sbert_results = []
-        for i, query in enumerate(queries):
-            similarities = cosine_similarity([query_embeddings[i]], candidate_embeddings)[0]
-            best_idx = np.argmax(similarities)
-            best_score = similarities[best_idx]
-            best_match = candidates[best_idx]
-            
-            sbert_results.append((query, best_match, best_score))
-            print(f"  📝 '{query}' → '{best_match}' (score: {best_score:.4f})")
-        
-        sbert_time = (time.time() - start_time) * 1000
-        
-        # Test TF-IDF (your current implementation)
-        print("\n2️⃣ TF-IDF Results:")
         try:
-            from semantic_similarity import find_best_semantic_match, calculate_semantic_similarity
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
             
-            start_time = time.time()
-            tfidf_results = []
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
             
-            for query in queries:
-                best_match = find_best_semantic_match(query, candidates, "general", 0.1)
-                if best_match:
-                    score = calculate_semantic_similarity(query, best_match, "general")
-                else:
-                    best_match = "No match"
-                    score = 0.0
+            print(f"✅ Downloaded: {filepath}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error downloading {url}: {e}")
+            return False
+    
+    def download_sentence_transformers_from_github(self):
+        """Download sentence transformers model from GitHub mirror"""
+        
+        print("🚀 Downloading Sentence Transformers from GitHub")
+        print("=" * 50)
+        
+        # GitHub repositories that mirror Hugging Face models
+        github_repos = [
+            {
+                "name": "all-MiniLM-L6-v2",
+                "repo": "sentence-transformers/all-MiniLM-L6-v2",
+                "files": [
+                    "config.json",
+                    "pytorch_model.bin", 
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                    "vocab.txt"
+                ]
+            }
+        ]
+        
+        for model_info in github_repos:
+            model_name = model_info["name"]
+            repo = model_info["repo"]
+            
+            print(f"\n📦 Downloading {model_name}...")
+            
+            model_dir = self.models_dir / model_name
+            model_dir.mkdir(exist_ok=True)
+            
+            success_count = 0
+            
+            for filename in model_info["files"]:
+                # Try different GitHub raw URLs
+                urls_to_try = [
+                    f"https://raw.githubusercontent.com/{repo}/main/{filename}",
+                    f"https://github.com/{repo}/raw/main/{filename}",
+                    f"https://raw.githubusercontent.com/{repo}/master/{filename}"
+                ]
                 
-                tfidf_results.append((query, best_match, score))
-                print(f"  📝 '{query}' → '{best_match}' (score: {score:.4f})")
+                filepath = model_dir / filename
+                downloaded = False
+                
+                for url in urls_to_try:
+                    if self.download_file(url, filepath):
+                        downloaded = True
+                        success_count += 1
+                        break
+                
+                if not downloaded:
+                    print(f"⚠️ Could not download {filename}")
             
-            tfidf_time = (time.time() - start_time) * 1000
-            
-            # Performance comparison
-            print(f"\n📊 Performance Comparison:")
-            print(f"{'Method':<15} {'Time (ms)':<12} {'Avg Score':<12}")
-            print("-" * 40)
-            
-            sbert_avg = sum(r[2] for r in sbert_results) / len(sbert_results)
-            tfidf_avg = sum(r[2] for r in tfidf_results) / len(tfidf_results)
-            
-            print(f"{'Sentence-BERT':<15} {sbert_time:<12.2f} {sbert_avg:<12.4f}")
-            print(f"{'TF-IDF':<15} {tfidf_time:<12.2f} {tfidf_avg:<12.4f}")
-            
-            # Analysis
-            print(f"\n🔍 Analysis:")
-            if sbert_avg > tfidf_avg:
-                improvement = ((sbert_avg - tfidf_avg) / tfidf_avg) * 100
-                print(f"✅ Sentence-BERT is {improvement:.1f}% more accurate")
-            
-            if sbert_time < tfidf_time * 2:
-                print(f"✅ Sentence-BERT performance is acceptable")
+            if success_count > 0:
+                print(f"✅ Downloaded {success_count}/{len(model_info['files'])} files for {model_name}")
             else:
-                print(f"⚠️ Sentence-BERT is slower but more accurate")
-                
-        except ImportError:
-            print("⚠️ TF-IDF comparison skipped - semantic_similarity not available")
-        
-    except ImportError:
-        print("❌ Sentence-BERT not available for comparison")
-    except Exception as e:
-        print(f"❌ Error in comparison: {e}")
-
-class SentenceBertSimilarity:
-    """
-    Advanced Sentence-BERT similarity matcher
-    Replacement for TF-IDF semantic similarity
-    """
+                print(f"❌ Failed to download {model_name}")
     
-    def __init__(self, model_name='all-MiniLM-L6-v2', min_similarity=0.3):
-        """
-        Initialize Sentence-BERT similarity matcher
+    def download_universal_sentence_encoder(self):
+        """Download Universal Sentence Encoder from TensorFlow Hub mirror"""
         
-        Args:
-            model_name: Sentence-BERT model to use
-            min_similarity: Minimum similarity threshold
-        """
-        self.model_name = model_name
-        self.min_similarity = min_similarity
-        self.model = None
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the Sentence-BERT model"""
-        try:
-            from sentence_transformers import SentenceTransformer
-            print(f"📥 Loading Sentence-BERT model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
-            print(f"✅ Model loaded successfully")
-        except ImportError:
-            print("❌ sentence-transformers not installed")
-            self.model = None
-        except Exception as e:
-            print(f"❌ Error loading model: {e}")
-            self.model = None
-    
-    def find_best_match(self, query: str, candidates: List[str], 
-                       return_score: bool = False) -> Optional[str]:
-        """
-        Find best matching candidate using Sentence-BERT
+        print("\n🧠 Downloading Universal Sentence Encoder")
+        print("=" * 45)
         
-        Args:
-            query: Query text
-            candidates: List of candidate texts
-            return_score: Whether to return similarity score
-            
-        Returns:
-            Best matching candidate or (candidate, score) if return_score=True
-        """
-        if not self.model or not query or not candidates:
-            return None
+        # TensorFlow Hub models often have GitHub mirrors
+        use_urls = [
+            "https://github.com/tensorflow/tfhub-modules/raw/master/universal-sentence-encoder/4/model.tar.gz",
+            "https://storage.googleapis.com/tfhub-modules/google/universal-sentence-encoder/4.tar.gz"
+        ]
         
-        try:
-            from sklearn.metrics.pairwise import cosine_similarity
-            
-            # Encode query and candidates
-            all_texts = [query] + candidates
-            embeddings = self.model.encode(all_texts)
-            
-            query_embedding = embeddings[0:1]
-            candidate_embeddings = embeddings[1:]
-            
-            # Calculate similarities
-            similarities = cosine_similarity(query_embedding, candidate_embeddings)[0]
-            
-            # Find best match above threshold
-            best_idx = np.argmax(similarities)
-            best_score = similarities[best_idx]
-            
-            if best_score >= self.min_similarity:
-                best_candidate = candidates[best_idx]
-                if return_score:
-                    return best_candidate, best_score
-                return best_candidate
-            
-            return None
-            
-        except Exception as e:
-            print(f"❌ Error in Sentence-BERT matching: {e}")
-            return None
+        model_dir = self.models_dir / "universal-sentence-encoder"
+        model_dir.mkdir(exist_ok=True)
+        
+        for url in use_urls:
+            filepath = model_dir / "model.tar.gz"
+            if self.download_file(url, filepath):
+                # Extract the model
+                try:
+                    import tarfile
+                    with tarfile.open(filepath, 'r:gz') as tar:
+                        tar.extractall(model_dir)
+                    print("✅ Extracted Universal Sentence Encoder")
+                    return True
+                except Exception as e:
+                    print(f"❌ Error extracting: {e}")
+        
+        return False
     
-    def calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate similarity between two texts"""
-        if not self.model or not text1 or not text2:
-            return 0.0
+    def download_fasttext_vectors(self):
+        """Download FastText word vectors from GitHub"""
+        
+        print("\n⚡ Downloading FastText Vectors")
+        print("=" * 35)
+        
+        # FastText vectors are available on GitHub
+        fasttext_urls = [
+            {
+                "name": "wiki-news-300d-1M.vec",
+                "url": "https://dl.fbaipublicfiles.com/fasttext/vectors-english/wiki-news-300d-1M.vec.zip",
+                "description": "1M word vectors trained on Wikipedia"
+            },
+            {
+                "name": "crawl-300d-2M.vec", 
+                "url": "https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip",
+                "description": "2M word vectors trained on Common Crawl"
+            }
+        ]
+        
+        fasttext_dir = self.models_dir / "fasttext"
+        fasttext_dir.mkdir(exist_ok=True)
+        
+        for vector_info in fasttext_urls:
+            print(f"\n📥 Downloading {vector_info['name']}...")
+            print(f"📝 {vector_info['description']}")
+            
+            zip_path = fasttext_dir / f"{vector_info['name']}.zip"
+            
+            if self.download_file(vector_info['url'], zip_path):
+                # Extract the vectors
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(fasttext_dir)
+                    print(f"✅ Extracted {vector_info['name']}")
+                    
+                    # Remove zip file to save space
+                    zip_path.unlink()
+                    
+                except Exception as e:
+                    print(f"❌ Error extracting {vector_info['name']}: {e}")
+    
+    def clone_model_repository(self, repo_url, model_name):
+        """Clone a GitHub repository containing a model"""
+        
+        print(f"\n📂 Cloning {model_name} from GitHub")
+        print("=" * 40)
+        
+        model_dir = self.models_dir / model_name
+        
+        if model_dir.exists():
+            print(f"⚠️ {model_name} already exists, removing...")
+            shutil.rmtree(model_dir)
         
         try:
-            from sklearn.metrics.pairwise import cosine_similarity
+            # Clone the repository
+            result = subprocess.run([
+                "git", "clone", repo_url, str(model_dir)
+            ], capture_output=True, text=True, check=True)
             
-            embeddings = self.model.encode([text1, text2])
-            similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
-            return float(similarity)
+            print(f"✅ Successfully cloned {model_name}")
+            return True
             
-        except Exception as e:
-            print(f"❌ Error calculating similarity: {e}")
-            return 0.0
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error cloning {repo_url}: {e}")
+            print(f"Error output: {e.stderr}")
+            return False
+        except FileNotFoundError:
+            print("❌ Git not found. Please install Git to clone repositories.")
+            return False
 
-def integration_example():
-    """Show how to integrate Sentence-BERT into your chatbot"""
+def create_local_sentence_transformer():
+    """Create a local sentence transformer using available models"""
     
-    print("\n🔧 Integration Example for Your Chatbot")
-    print("=" * 45)
+    print("\n🔧 Creating Local Sentence Transformer")
+    print("=" * 40)
     
-    integration_code = '''
-# 1. Update requirements.txt
-sentence-transformers>=2.2.0
-
-# 2. Create enhanced_semantic_similarity.py
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+    code = '''
 import numpy as np
+import spacy
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import pickle
+import os
 
-class SentenceBertMatcher:
-    def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+class LocalSentenceTransformer:
+    """
+    Local sentence transformer using spaCy + TF-IDF
+    No internet required after setup
+    """
     
-    def find_best_qa_match(self, query, qa_questions):
-        if not qa_questions:
-            return None
+    def __init__(self, model_name="en_core_web_md"):
+        self.nlp = spacy.load(model_name)
+        self.vectorizer = None
+        self.vocab = []
+    
+    def encode(self, sentences, batch_size=32):
+        """Encode sentences to vectors"""
+        if isinstance(sentences, str):
+            sentences = [sentences]
         
-        # Encode query and questions
-        all_texts = [query] + qa_questions
-        embeddings = self.model.encode(all_texts)
+        embeddings = []
         
-        # Calculate similarities
-        query_emb = embeddings[0:1]
-        question_embs = embeddings[1:]
-        similarities = cosine_similarity(query_emb, question_embs)[0]
+        for sentence in sentences:
+            # Method 1: spaCy document vectors
+            doc = self.nlp(sentence)
+            if doc.has_vector:
+                spacy_vector = doc.vector
+            else:
+                spacy_vector = np.zeros(300)
+            
+            # Method 2: Average word vectors
+            word_vectors = []
+            for token in doc:
+                if token.has_vector and not token.is_stop and not token.is_punct:
+                    word_vectors.append(token.vector)
+            
+            if word_vectors:
+                avg_vector = np.mean(word_vectors, axis=0)
+            else:
+                avg_vector = np.zeros(300)
+            
+            # Combine both methods
+            combined_vector = 0.6 * spacy_vector + 0.4 * avg_vector
+            embeddings.append(combined_vector)
         
-        # Find best match
-        best_idx = np.argmax(similarities)
-        if similarities[best_idx] > 0.5:  # Threshold
-            return qa_questions[best_idx]
-        return None
+        return np.array(embeddings)
+    
+    def similarity(self, sentences1, sentences2):
+        """Calculate similarity between sentence pairs"""
+        emb1 = self.encode(sentences1)
+        emb2 = self.encode(sentences2)
+        
+        return cosine_similarity(emb1, emb2)
+    
+    def save(self, path):
+        """Save the model"""
+        model_data = {
+            'model_name': self.nlp.meta['name'],
+            'vocab': self.vocab
+        }
+        
+        with open(path, 'wb') as f:
+            pickle.dump(model_data, f)
+    
+    def load(self, path):
+        """Load the model"""
+        with open(path, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        self.nlp = spacy.load(model_data['model_name'])
+        self.vocab = model_data['vocab']
 
-# 3. Update voice.py ProductionSupportAnalyzer
-class ProductionSupportAnalyzer:
-    def __init__(self):
-        self.sbert_matcher = SentenceBertMatcher()
+# Example usage
+if __name__ == "__main__":
+    # Create local transformer
+    transformer = LocalSentenceTransformer()
     
-    def _find_best_qa_match(self, user_question):
-        candidates = list(self.qa_data.keys())
-        best_match = self.sbert_matcher.find_best_qa_match(
-            user_question, candidates
-        )
-        if best_match:
-            return self.qa_data[best_match]
-        return None
+    # Test sentences
+    sentences = [
+        "I need help with password reset",
+        "Can you help me reset my password?",
+        "S0C4 abend error occurred"
+    ]
+    
+    # Encode sentences
+    embeddings = transformer.encode(sentences)
+    print(f"Embeddings shape: {embeddings.shape}")
+    
+    # Calculate similarities
+    similarities = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+    print(f"Password reset similarity: {similarities:.4f}")
     '''
     
-    print("📝 Integration Steps:")
-    print("1. Install: pip install sentence-transformers")
-    print("2. Replace TF-IDF matcher with Sentence-BERT")
-    print("3. Update your ProductionSupportAnalyzer class")
-    print("4. Test with your existing Q&A data")
+    # Save the local transformer code
+    with open("local_sentence_transformer.py", "w") as f:
+        f.write(code)
     
-    print(f"\n💻 Sample Integration Code:")
-    print(integration_code)
-
-def test_with_your_data():
-    """Test Sentence-BERT with your actual chatbot data"""
-    
-    print("\n🎯 Testing with Your Aspire Support Data")
-    print("=" * 45)
-    
-    # Your actual Q&A data examples
-    qa_pairs = {
-        "what is the relationship between aspire and vto application": 
-            "Aspire and VTO applications are integrated through data exchange APIs...",
-        "how do i reset my password": 
-            "To reset your password, contact the help desk or use the self-service portal...",
-        "what are common abend codes": 
-            "Common abend codes include S0C4 (storage violation), S0C7 (data exception)...",
-        "job is running for long time what might be the reason":
-            "Long running jobs may be caused by resource contention, data volume..."
-    }
-    
-    test_queries = [
-        "aspire vto connection",
-        "password reset help", 
-        "common abends",
-        "job running too long",
-        "memory issue production"
-    ]
-    
-    try:
-        # Test with Sentence-BERT
-        sbert_matcher = SentenceBertSimilarity(min_similarity=0.3)
-        
-        if sbert_matcher.model:
-            print("✅ Testing Sentence-BERT with your data:")
-            
-            questions = list(qa_pairs.keys())
-            
-            for query in test_queries:
-                best_match = sbert_matcher.find_best_match(query, questions, return_score=True)
-                
-                if best_match:
-                    match, score = best_match
-                    answer = qa_pairs[match][:60] + "..."
-                    print(f"\n📝 Query: '{query}'")
-                    print(f"🎯 Match: '{match}' (score: {score:.4f})")
-                    print(f"💬 Answer: {answer}")
-                else:
-                    print(f"\n📝 Query: '{query}'")
-                    print(f"❌ No match found")
-        else:
-            print("❌ Sentence-BERT model not available")
-            
-    except Exception as e:
-        print(f"❌ Error testing with your data: {e}")
+    print("✅ Created local_sentence_transformer.py")
+    print("🎯 This uses only your existing spaCy model!")
 
 def main():
-    """Main function to test Sentence-BERT upgrade"""
+    """Main function to download models from GitHub"""
     
-    print("🚀 Sentence-BERT Upgrade for Aspire Support")
-    print("🎯 Better than TF-IDF Semantic Similarity")
-    print("=" * 60)
+    print("🚀 GitHub Model Downloader")
+    print("🎯 Alternative to Hugging Face")
+    print("=" * 50)
     
-    # Install sentence-transformers
-    if install_sentence_transformers():
-        
-        # Test basic functionality
-        model, embeddings = test_sentence_bert_basic()
-        
-        if model:
-            # Compare with TF-IDF
-            compare_with_tfidf()
-            
-            # Test with your actual data
-            test_with_your_data()
-            
-            # Show integration example
-            integration_example()
-            
-            print(f"\n✅ Sentence-BERT Testing Complete!")
-            print(f"🎉 Ready to upgrade from TF-IDF to Sentence-BERT!")
-        else:
-            print(f"❌ Sentence-BERT testing failed")
-    else:
-        print(f"❌ Installation failed")
+    downloader = GitHubModelDownloader()
     
-    print("=" * 60)
+    print("\n📋 Available Options:")
+    print("1. Download Sentence Transformers from GitHub mirrors")
+    print("2. Download Universal Sentence Encoder")
+    print("3. Download FastText word vectors")
+    print("4. Create local sentence transformer (recommended)")
+    print("5. Clone specific model repositories")
+    
+    # For now, let's create the local transformer (best option)
+    create_local_sentence_transformer()
+    
+    print("\n💡 Recommendations:")
+    print("✅ Local Sentence Transformer - Uses your existing spaCy model")
+    print("⚡ FastText Vectors - Good for word-level similarity")
+    print("🧠 Universal Sentence Encoder - Requires TensorFlow")
+    print("🔄 GitHub Cloning - For specific model repositories")
+    
+    print("\n🎉 Local solution created successfully!")
+    print("📁 Check local_sentence_transformer.py for implementation")
 
 if __name__ == "__main__":
     main() 
