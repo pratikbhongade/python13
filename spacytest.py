@@ -1,221 +1,254 @@
 #!/usr/bin/env python3
 """
-Comprehensive spaCy Model Loader
-Handles model loading with multiple fallback options and automatic installation
+spaCy Model Performance vs Accuracy Comparison
+Demonstrates the trade-offs between model size, speed, and accuracy
 """
 
 import spacy
-import subprocess
-import sys
-import logging
-import os
-from pathlib import Path
+import time
+import statistics
+from typing import List, Dict, Tuple
 
-def install_spacy_model(model_name="en_core_web_sm"):
+# Sample texts for testing
+TEST_TEXTS = [
+    "Apple Inc. is planning to open a new store in New York City next month.",
+    "The S0C4 abend occurred at 14:30 EST when processing the COBOL program.",
+    "Microsoft Corporation reported quarterly earnings of $2.1 billion yesterday.",
+    "The database connection failed with error code ORA-12154 in production.",
+    "Google's headquarters in Mountain View, California employs over 50,000 people.",
+    "System restart required after memory leak in application server JVM.",
+    "Amazon Web Services launched three new data centers in Europe last week.",
+    "Network timeout error 408 detected on mainframe system PROD01.",
+    "Tesla's stock price increased by 15% following the quarterly report.",
+    "Job BATCH001 has been running for 3 hours exceeding normal baseline."
+]
+
+def get_model_info() -> Dict[str, Dict]:
     """
-    Automatically install spaCy model if not found
-    
-    Args:
-        model_name: Name of the spaCy model to install
+    Information about different spaCy models
     
     Returns:
-        bool: True if installation successful, False otherwise
+        Dictionary with model information
     """
-    try:
-        print(f"📦 Installing spaCy model: {model_name}")
-        result = subprocess.run([
-            sys.executable, "-m", "spacy", "download", model_name
-        ], capture_output=True, text=True, check=True)
-        
-        print(f"✅ Successfully installed {model_name}")
-        print(result.stdout)
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install {model_name}: {e}")
-        print(f"Error output: {e.stderr}")
-        return False
-    except Exception as e:
-        print(f"❌ Unexpected error installing {model_name}: {e}")
-        return False
-
-def load_spacy_model_with_fallbacks(preferred_model="en_core_web_sm"):
-    """
-    Load spaCy model with multiple fallback options
-    
-    Args:
-        preferred_model: Preferred model name to load
-        
-    Returns:
-        spacy.Language: Loaded spaCy model
-    """
-    
-    # Method 1: Try loading the preferred model
-    try:
-        nlp = spacy.load(preferred_model)
-        logging.info(f"✅ Successfully loaded {preferred_model}")
-        return nlp
-    except OSError:
-        logging.warning(f"⚠️ Could not load {preferred_model}")
-    
-    # Method 2: Try loading from local directory
-    local_paths = [
-        f"./{preferred_model}",
-        f"./model/{preferred_model}",
-        f"../models/{preferred_model}",
-        preferred_model.replace("_", "-")  # Try with hyphens
-    ]
-    
-    for path in local_paths:
-        try:
-            nlp = spacy.load(path)
-            logging.info(f"✅ Successfully loaded model from: {path}")
-            return nlp
-        except OSError:
-            continue
-    
-    # Method 3: Try alternative model names
-    alternative_models = [
-        "en_core_web_md",  # Medium model
-        "en_core_web_lg",  # Large model
-        "en",              # Generic English
-    ]
-    
-    for model in alternative_models:
-        try:
-            nlp = spacy.load(model)
-            logging.info(f"✅ Successfully loaded alternative model: {model}")
-            return nlp
-        except OSError:
-            continue
-    
-    # Method 4: Attempt automatic installation
-    logging.info(f"🔄 Attempting to install {preferred_model}...")
-    if install_spacy_model(preferred_model):
-        try:
-            nlp = spacy.load(preferred_model)
-            logging.info(f"✅ Successfully loaded {preferred_model} after installation")
-            return nlp
-        except OSError:
-            logging.error(f"❌ Still cannot load {preferred_model} after installation")
-    
-    # Method 5: Create blank English model as last resort
-    logging.warning("⚠️ Using blank English model as fallback")
-    nlp = spacy.blank("en")
-    
-    # Add basic components to blank model
-    try:
-        nlp.add_pipe("sentencizer")
-        logging.info("✅ Added sentencizer to blank model")
-    except Exception as e:
-        logging.warning(f"Could not add sentencizer: {e}")
-    
-    return nlp
-
-def check_model_capabilities(nlp):
-    """
-    Check what capabilities the loaded model has
-    
-    Args:
-        nlp: Loaded spaCy model
-        
-    Returns:
-        dict: Dictionary of model capabilities
-    """
-    capabilities = {
-        "has_ner": nlp.has_pipe("ner"),
-        "has_tagger": nlp.has_pipe("tagger"),
-        "has_parser": nlp.has_pipe("parser"),
-        "has_lemmatizer": nlp.has_pipe("lemmatizer"),
-        "has_sentencizer": nlp.has_pipe("sentencizer"),
-        "pipeline": nlp.pipe_names,
-        "vocab_size": len(nlp.vocab),
-        "model_name": nlp.meta.get("name", "unknown"),
-        "model_version": nlp.meta.get("version", "unknown")
+    return {
+        "en_core_web_sm": {
+            "size": "15 MB",
+            "vocab_size": "50K",
+            "description": "Small model - Fast, basic accuracy",
+            "use_case": "Development, testing, resource-constrained environments"
+        },
+        "en_core_web_md": {
+            "size": "50 MB", 
+            "vocab_size": "50K + 20K word vectors",
+            "description": "Medium model - Balanced speed/accuracy",
+            "use_case": "Production applications, good balance"
+        },
+        "en_core_web_lg": {
+            "size": "750 MB",
+            "vocab_size": "50K + 500K word vectors", 
+            "description": "Large model - Slower, best accuracy",
+            "use_case": "High-accuracy requirements, research"
+        },
+        "blank": {
+            "size": "< 1 MB",
+            "vocab_size": "Minimal",
+            "description": "Blank model - Fastest, no pre-trained components",
+            "use_case": "Custom pipelines, minimal processing"
+        }
     }
-    
-    return capabilities
 
-def print_model_info(nlp):
+def benchmark_model(model_name: str, texts: List[str], iterations: int = 5) -> Dict:
     """
-    Print detailed information about the loaded model
+    Benchmark a spaCy model's performance
     
     Args:
-        nlp: Loaded spaCy model
+        model_name: Name of the model to benchmark
+        texts: List of texts to process
+        iterations: Number of iterations for timing
+        
+    Returns:
+        Dictionary with benchmark results
     """
-    capabilities = check_model_capabilities(nlp)
-    
-    print("\n" + "="*50)
-    print("🤖 spaCy Model Information")
-    print("="*50)
-    print(f"Model Name: {capabilities['model_name']}")
-    print(f"Model Version: {capabilities['model_version']}")
-    print(f"Vocabulary Size: {capabilities['vocab_size']:,}")
-    print(f"Pipeline Components: {', '.join(capabilities['pipeline'])}")
-    print("\nCapabilities:")
-    print(f"  • Named Entity Recognition: {'✅' if capabilities['has_ner'] else '❌'}")
-    print(f"  • Part-of-Speech Tagging: {'✅' if capabilities['has_tagger'] else '❌'}")
-    print(f"  • Dependency Parsing: {'✅' if capabilities['has_parser'] else '❌'}")
-    print(f"  • Lemmatization: {'✅' if capabilities['has_lemmatizer'] else '❌'}")
-    print(f"  • Sentence Segmentation: {'✅' if capabilities['has_sentencizer'] else '❌'}")
-    print("="*50)
-
-# Example usage functions
-def simple_model_loading():
-    """Simple model loading example"""
     try:
-        # Basic loading
-        nlp = spacy.load("en_core_web_sm")
-        print("✅ Model loaded successfully!")
-        return nlp
-    except OSError:
-        print("❌ Model not found. Please install it:")
-        print("python -m spacy download en_core_web_sm")
-        return None
-
-def robust_model_loading():
-    """Robust model loading with error handling"""
-    models_to_try = ["en_core_web_sm", "en_core_web_md", "en"]
-    
-    for model_name in models_to_try:
-        try:
+        # Load model
+        if model_name == "blank":
+            nlp = spacy.blank("en")
+        else:
             nlp = spacy.load(model_name)
-            print(f"✅ Successfully loaded: {model_name}")
-            return nlp
-        except OSError:
-            print(f"⚠️ Could not load: {model_name}")
-            continue
+        
+        # Warm up
+        for text in texts[:2]:
+            nlp(text)
+        
+        # Benchmark processing speed
+        processing_times = []
+        
+        for _ in range(iterations):
+            start_time = time.time()
+            
+            for text in texts:
+                doc = nlp(text)
+                # Force processing by accessing tokens
+                _ = [token.text for token in doc]
+            
+            end_time = time.time()
+            processing_times.append(end_time - start_time)
+        
+        # Calculate statistics
+        avg_time = statistics.mean(processing_times)
+        texts_per_second = len(texts) / avg_time
+        
+        # Test capabilities
+        test_doc = nlp(texts[0])
+        
+        results = {
+            "model_name": model_name,
+            "status": "success",
+            "avg_processing_time": avg_time,
+            "texts_per_second": texts_per_second,
+            "pipeline_components": nlp.pipe_names,
+            "has_ner": nlp.has_pipe("ner"),
+            "has_pos": nlp.has_pipe("tagger"),
+            "has_parser": nlp.has_pipe("parser"),
+            "has_vectors": nlp.has_pipe("tok2vec") or len(nlp.vocab.vectors) > 0,
+            "vocab_size": len(nlp.vocab),
+            "entities_found": len(test_doc.ents) if nlp.has_pipe("ner") else 0,
+            "tokens_processed": len(test_doc)
+        }
+        
+        return results
+        
+    except Exception as e:
+        return {
+            "model_name": model_name,
+            "status": "error",
+            "error": str(e),
+            "avg_processing_time": float('inf'),
+            "texts_per_second": 0
+        }
+
+def print_performance_comparison(results: List[Dict]):
+    """
+    Print formatted performance comparison
     
-    # Fallback to blank model
-    print("⚠️ Using blank English model")
-    return spacy.blank("en")
+    Args:
+        results: List of benchmark results
+    """
+    print("\n" + "="*80)
+    print("🚀 spaCy Model Performance Comparison")
+    print("="*80)
+    
+    # Sort by speed (fastest first)
+    successful_results = [r for r in results if r["status"] == "success"]
+    successful_results.sort(key=lambda x: x["avg_processing_time"])
+    
+    print(f"{'Model':<20} {'Speed':<15} {'Texts/sec':<12} {'Components':<25} {'Accuracy'}")
+    print("-" * 80)
+    
+    for result in successful_results:
+        model = result["model_name"]
+        speed = f"{result['avg_processing_time']:.3f}s"
+        tps = f"{result['texts_per_second']:.1f}"
+        components = f"{len(result['pipeline_components'])}"
+        
+        # Accuracy indicators
+        accuracy_score = 0
+        if result["has_ner"]: accuracy_score += 1
+        if result["has_pos"]: accuracy_score += 1  
+        if result["has_parser"]: accuracy_score += 1
+        if result["has_vectors"]: accuracy_score += 2
+        
+        accuracy = "⭐" * min(accuracy_score, 5)
+        
+        print(f"{model:<20} {speed:<15} {tps:<12} {components:<25} {accuracy}")
+
+def print_detailed_analysis(results: List[Dict], model_info: Dict):
+    """
+    Print detailed analysis of each model
+    
+    Args:
+        results: Benchmark results
+        model_info: Model information dictionary
+    """
+    print("\n" + "="*60)
+    print("📊 Detailed Model Analysis")
+    print("="*60)
+    
+    for result in results:
+        if result["status"] != "success":
+            continue
+            
+        model = result["model_name"]
+        info = model_info.get(model, {})
+        
+        print(f"\n🔍 {model.upper()}")
+        print(f"   Size: {info.get('size', 'Unknown')}")
+        print(f"   Description: {info.get('description', 'No description')}")
+        print(f"   Processing Speed: {result['avg_processing_time']:.3f} seconds")
+        print(f"   Throughput: {result['texts_per_second']:.1f} texts/second")
+        print(f"   Pipeline: {', '.join(result['pipeline_components'])}")
+        print(f"   Vocabulary: {result['vocab_size']:,} entries")
+        print(f"   Use Case: {info.get('use_case', 'General purpose')}")
+
+def get_recommendations() -> Dict[str, str]:
+    """
+    Get model recommendations for different use cases
+    
+    Returns:
+        Dictionary of recommendations
+    """
+    return {
+        "Development/Testing": "en_core_web_sm - Fast iteration, good enough accuracy",
+        "Production Chatbot": "en_core_web_sm or en_core_web_md - Balance of speed and accuracy", 
+        "High-Volume Processing": "en_core_web_sm or blank - Maximum throughput",
+        "Research/Analysis": "en_core_web_lg - Best accuracy for detailed analysis",
+        "Resource Constrained": "blank model - Minimal memory footprint",
+        "Real-time Applications": "en_core_web_sm - Sub-second response times",
+        "Batch Processing": "en_core_web_md - Good accuracy for offline processing"
+    }
 
 def main():
     """
-    Main function to demonstrate model loading
+    Main function to run performance comparison
     """
-    print("🚀 spaCy Model Loading Examples")
-    print("="*40)
+    print("🚀 Starting spaCy Model Performance Analysis...")
     
-    # Load model with comprehensive fallbacks
-    nlp = load_spacy_model_with_fallbacks()
+    # Models to test (only test available ones)
+    models_to_test = ["blank", "en_core_web_sm"]
     
-    # Print model information
-    print_model_info(nlp)
+    # Try to add other models if available
+    for model in ["en_core_web_md", "en_core_web_lg"]:
+        try:
+            spacy.load(model)
+            models_to_test.append(model)
+        except OSError:
+            print(f"⚠️ {model} not available (not installed)")
     
-    # Test the model
-    test_text = "Hello, this is a test sentence for spaCy processing."
-    doc = nlp(test_text)
+    print(f"📋 Testing models: {', '.join(models_to_test)}")
     
-    print(f"\n📝 Test Processing:")
-    print(f"Input: {test_text}")
-    print(f"Tokens: {[token.text for token in doc]}")
+    # Run benchmarks
+    results = []
+    for model in models_to_test:
+        print(f"🧪 Benchmarking {model}...")
+        result = benchmark_model(model, TEST_TEXTS)
+        results.append(result)
     
-    if nlp.has_pipe("ner"):
-        entities = [(ent.text, ent.label_) for ent in doc.ents]
-        print(f"Entities: {entities}")
+    # Print results
+    model_info = get_model_info()
+    print_performance_comparison(results)
+    print_detailed_analysis(results, model_info)
     
-    return nlp
+    # Print recommendations
+    print("\n" + "="*60)
+    print("💡 Model Recommendations by Use Case")
+    print("="*60)
+    recommendations = get_recommendations()
+    for use_case, recommendation in recommendations.items():
+        print(f"• {use_case}: {recommendation}")
+    
+    print("\n✅ Performance analysis complete!")
+    
+    return results
 
 if __name__ == "__main__":
-    nlp = main() 
+    main() 
