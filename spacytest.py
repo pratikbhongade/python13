@@ -1,281 +1,458 @@
 #!/usr/bin/env python3
 """
-spaCy Model Recommendation for Aspire Support Chatbot
-Analyzes requirements and recommends the best model
+Sentence-BERT Semantic Similarity Upgrade
+Better than TF-IDF for Aspire Support Chatbot
 """
 
-import spacy
-from pathlib import Path
+import subprocess
+import sys
+import time
+import numpy as np
+from typing import List, Tuple, Optional
 
-def analyze_chatbot_requirements():
-    """Analyze the specific NLP requirements of the Aspire Support chatbot"""
+def install_sentence_transformers():
+    """Install sentence-transformers library"""
     
-    print("🔍 Analyzing Aspire Support Chatbot Requirements")
-    print("=" * 60)
+    print("📦 Installing Sentence-BERT (sentence-transformers)")
+    print("=" * 50)
     
-    requirements = {
-        "Primary Tasks": [
-            "🎯 Abend code extraction (S0C4, S0C7, S322, etc.)",
-            "💬 Greeting detection (hello, hi, good morning)",
-            "🔧 Technical term recognition",
-            "📝 Intent classification support",
-            "🔍 Entity extraction for production support"
-        ],
-        "Text Types": [
-            "📱 Short user queries (5-50 words)",
-            "💻 Technical mainframe terminology", 
-            "🗣️ Conversational language",
-            "📊 Error messages and codes",
-            "❓ Question-answer pairs"
-        ],
-        "Performance Needs": [
-            "⚡ Real-time response (< 1 second)",
-            "💾 Memory efficient (web deployment)",
-            "🔄 High throughput (multiple users)",
-            "📦 Small deployment size"
-        ],
-        "Accuracy Needs": [
-            "🎯 High precision for abend codes (critical)",
-            "💬 Good conversational understanding",
-            "🔍 Reliable entity extraction",
-            "📝 Consistent text processing"
+    try:
+        # Install sentence-transformers
+        result = subprocess.run([
+            sys.executable, "-m", "pip", "install", "sentence-transformers"
+        ], capture_output=True, text=True, check=True)
+        
+        print("✅ Successfully installed sentence-transformers")
+        print(result.stdout)
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install sentence-transformers: {e}")
+        print(f"Error output: {e.stderr}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return False
+
+def test_sentence_bert_basic():
+    """Test basic Sentence-BERT functionality"""
+    
+    print("\n🧪 Testing Basic Sentence-BERT Functionality")
+    print("=" * 50)
+    
+    try:
+        from sentence_transformers import SentenceTransformer
+        from sklearn.metrics.pairwise import cosine_similarity
+        
+        # Load a lightweight but powerful model
+        print("📥 Loading Sentence-BERT model (all-MiniLM-L6-v2)...")
+        model = SentenceTransformer('all-MiniLM-L6-v2')
+        print("✅ Model loaded successfully!")
+        
+        # Test sentences from your chatbot domain
+        test_sentences = [
+            "I need help with password reset",
+            "Can you help me reset my password?",
+            "S0C4 abend error occurred",
+            "Storage violation S0C4 happened",
+            "What is the relationship between Aspire and VTO?",
+            "How are Aspire and VTO connected?",
+            "Memory issue in production system",
+            "Production memory problem occurred",
+            "Job is running for a long time",
+            "Long running job analysis needed"
         ]
-    }
-    
-    for category, items in requirements.items():
-        print(f"\n{category}:")
-        for item in items:
-            print(f"  {item}")
-    
-    return requirements
+        
+        print(f"\n🔍 Testing with {len(test_sentences)} sentences...")
+        
+        # Generate embeddings
+        start_time = time.time()
+        embeddings = model.encode(test_sentences)
+        encoding_time = (time.time() - start_time) * 1000
+        
+        print(f"⏱️  Encoding time: {encoding_time:.2f}ms")
+        print(f"📊 Embedding shape: {embeddings.shape}")
+        print(f"🎯 Embedding dimension: {embeddings.shape[1]}")
+        
+        # Test similarity calculations
+        print(f"\n🎯 Similarity Test Results:")
+        test_pairs = [
+            (0, 1),  # password reset variations
+            (2, 3),  # S0C4 abend variations  
+            (4, 5),  # Aspire-VTO relationship variations
+            (6, 7),  # memory issue variations
+            (8, 9)   # long running job variations
+        ]
+        
+        for i, j in test_pairs:
+            similarity = cosine_similarity([embeddings[i]], [embeddings[j]])[0][0]
+            print(f"  📝 '{test_sentences[i][:40]}...'")
+            print(f"  📝 '{test_sentences[j][:40]}...'")
+            print(f"  🎯 Similarity: {similarity:.4f}")
+            print()
+        
+        return model, embeddings
+        
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("Please install sentence-transformers first")
+        return None, None
+    except Exception as e:
+        print(f"❌ Error testing Sentence-BERT: {e}")
+        return None, None
 
-def compare_spacy_models():
-    """Compare different spaCy models for the use case"""
+def compare_with_tfidf():
+    """Compare Sentence-BERT with your current TF-IDF implementation"""
     
-    print("\n🏆 spaCy Model Comparison")
-    print("=" * 60)
+    print("⚖️ Sentence-BERT vs TF-IDF Comparison")
+    print("=" * 45)
     
-    models = {
-        "en_core_web_sm": {
-            "size": "~15MB",
-            "vocab": "50K vectors",
-            "accuracy": "Good",
-            "speed": "Fast",
-            "components": ["tok2vec", "tagger", "parser", "ner", "attribute_ruler", "lemmatizer"],
-            "pros": [
-                "✅ Small size - perfect for deployment",
-                "✅ Fast processing - real-time responses", 
-                "✅ Good NER - handles abend codes well",
-                "✅ Parser included - sentence segmentation",
-                "✅ Balanced performance",
-                "✅ Standard choice for production"
-            ],
-            "cons": [
-                "⚠️ Limited vocabulary",
-                "⚠️ May miss complex technical terms"
-            ],
-            "recommendation": "🌟 RECOMMENDED for your use case"
-        },
-        
-        "en_core_web_md": {
-            "size": "~40MB", 
-            "vocab": "685K vectors",
-            "accuracy": "Better",
-            "speed": "Medium",
-            "components": ["tok2vec", "tagger", "parser", "ner", "attribute_ruler", "lemmatizer"],
-            "pros": [
-                "✅ Better word vectors",
-                "✅ Improved accuracy",
-                "✅ Better similarity matching",
-                "✅ More technical terms"
-            ],
-            "cons": [
-                "⚠️ 3x larger than sm",
-                "⚠️ Slower processing",
-                "⚠️ More memory usage"
-            ],
-            "recommendation": "🔄 Consider if accuracy is critical"
-        },
-        
-        "en_core_web_lg": {
-            "size": "~560MB",
-            "vocab": "685K vectors", 
-            "accuracy": "Best",
-            "speed": "Slower",
-            "components": ["tok2vec", "tagger", "parser", "ner", "attribute_ruler", "lemmatizer"],
-            "pros": [
-                "✅ Highest accuracy",
-                "✅ Best word vectors",
-                "✅ Excellent for complex NLP"
-            ],
-            "cons": [
-                "❌ Very large size",
-                "❌ Slow processing", 
-                "❌ High memory usage",
-                "❌ Overkill for chatbot"
-            ],
-            "recommendation": "❌ NOT recommended for chatbot"
-        },
-        
-        "en_core_web_trf": {
-            "size": "~440MB",
-            "vocab": "Transformer-based",
-            "accuracy": "Excellent", 
-            "speed": "Slowest",
-            "components": ["transformer", "tagger", "parser", "ner", "attribute_ruler", "lemmatizer"],
-            "pros": [
-                "✅ State-of-the-art accuracy",
-                "✅ Transformer architecture",
-                "✅ Best for complex understanding"
-            ],
-            "cons": [
-                "❌ Very large size",
-                "❌ Very slow processing",
-                "❌ Requires GPU for speed",
-                "❌ Overkill for simple tasks"
-            ],
-            "recommendation": "❌ NOT recommended for real-time chatbot"
-        }
-    }
+    # Test queries from your chatbot
+    queries = [
+        "password reset help",
+        "S0C4 abend error", 
+        "memory issue production",
+        "aspire vto relationship",
+        "job running long time"
+    ]
     
-    for model_name, details in models.items():
-        print(f"\n📦 {model_name}")
-        print(f"   Size: {details['size']}")
-        print(f"   Vocabulary: {details['vocab']}")
-        print(f"   Accuracy: {details['accuracy']}")
-        print(f"   Speed: {details['speed']}")
-        print(f"   Components: {', '.join(details['components'])}")
-        
-        print("   Pros:")
-        for pro in details['pros']:
-            print(f"     {pro}")
-        
-        print("   Cons:")
-        for con in details['cons']:
-            print(f"     {con}")
-        
-        print(f"   📋 {details['recommendation']}")
-    
-    return models
-
-def test_model_performance():
-    """Test actual performance with sample chatbot queries"""
-    
-    print("\n⚡ Performance Testing")
-    print("=" * 40)
-    
-    # Sample queries typical for your chatbot
-    test_queries = [
-        "S0C4 abend error",
-        "Hello, I need help with password reset",
-        "What is the relationship between Aspire and VTO?",
-        "Job ABC123 is running for 3 hours",
-        "Memory issue in production",
-        "Good morning, can you help me?",
-        "S0C7 data exception occurred"
+    candidates = [
+        "reset my password",
+        "forgot password", 
+        "S0C4 storage violation",
+        "abend code error",
+        "memory problem in system",
+        "production memory issue",
+        "what is relationship between aspire and vto",
+        "connection aspire vto",
+        "job is running for hours",
+        "long running job analysis"
     ]
     
     try:
-        nlp = spacy.load("en_core_web_sm")
-        print("✅ Testing with en_core_web_sm")
+        from sentence_transformers import SentenceTransformer
+        from sklearn.metrics.pairwise import cosine_similarity
         
-        import time
+        # Load Sentence-BERT model
+        model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        total_time = 0
-        for query in test_queries:
+        print("🧪 Testing both approaches...")
+        
+        results = {}
+        
+        # Test Sentence-BERT
+        print("\n1️⃣ Sentence-BERT Results:")
+        start_time = time.time()
+        
+        # Encode all texts at once (efficient)
+        all_texts = queries + candidates
+        all_embeddings = model.encode(all_texts)
+        
+        query_embeddings = all_embeddings[:len(queries)]
+        candidate_embeddings = all_embeddings[len(queries):]
+        
+        sbert_results = []
+        for i, query in enumerate(queries):
+            similarities = cosine_similarity([query_embeddings[i]], candidate_embeddings)[0]
+            best_idx = np.argmax(similarities)
+            best_score = similarities[best_idx]
+            best_match = candidates[best_idx]
+            
+            sbert_results.append((query, best_match, best_score))
+            print(f"  📝 '{query}' → '{best_match}' (score: {best_score:.4f})")
+        
+        sbert_time = (time.time() - start_time) * 1000
+        
+        # Test TF-IDF (your current implementation)
+        print("\n2️⃣ TF-IDF Results:")
+        try:
+            from semantic_similarity import find_best_semantic_match, calculate_semantic_similarity
+            
             start_time = time.time()
-            doc = nlp(query)
-            end_time = time.time()
+            tfidf_results = []
             
-            processing_time = (end_time - start_time) * 1000  # Convert to ms
-            total_time += processing_time
+            for query in queries:
+                best_match = find_best_semantic_match(query, candidates, "general", 0.1)
+                if best_match:
+                    score = calculate_semantic_similarity(query, best_match, "general")
+                else:
+                    best_match = "No match"
+                    score = 0.0
+                
+                tfidf_results.append((query, best_match, score))
+                print(f"  📝 '{query}' → '{best_match}' (score: {score:.4f})")
             
-            entities = [(ent.text, ent.label_) for ent in doc.ents]
-            tokens = len(doc)
+            tfidf_time = (time.time() - start_time) * 1000
             
-            print(f"  📝 '{query}'")
-            print(f"     ⏱️  {processing_time:.2f}ms | 🔤 {tokens} tokens | 🎯 {len(entities)} entities")
-            if entities:
-                print(f"     📊 Entities: {entities}")
+            # Performance comparison
+            print(f"\n📊 Performance Comparison:")
+            print(f"{'Method':<15} {'Time (ms)':<12} {'Avg Score':<12}")
+            print("-" * 40)
+            
+            sbert_avg = sum(r[2] for r in sbert_results) / len(sbert_results)
+            tfidf_avg = sum(r[2] for r in tfidf_results) / len(tfidf_results)
+            
+            print(f"{'Sentence-BERT':<15} {sbert_time:<12.2f} {sbert_avg:<12.4f}")
+            print(f"{'TF-IDF':<15} {tfidf_time:<12.2f} {tfidf_avg:<12.4f}")
+            
+            # Analysis
+            print(f"\n🔍 Analysis:")
+            if sbert_avg > tfidf_avg:
+                improvement = ((sbert_avg - tfidf_avg) / tfidf_avg) * 100
+                print(f"✅ Sentence-BERT is {improvement:.1f}% more accurate")
+            
+            if sbert_time < tfidf_time * 2:
+                print(f"✅ Sentence-BERT performance is acceptable")
+            else:
+                print(f"⚠️ Sentence-BERT is slower but more accurate")
+                
+        except ImportError:
+            print("⚠️ TF-IDF comparison skipped - semantic_similarity not available")
         
-        avg_time = total_time / len(test_queries)
-        print(f"\n📊 Average processing time: {avg_time:.2f}ms")
-        
-        if avg_time < 50:
-            print("✅ Excellent speed for real-time chatbot")
-        elif avg_time < 100:
-            print("✅ Good speed for chatbot")
-        else:
-            print("⚠️ May be too slow for real-time responses")
-            
-    except OSError:
-        print("⚠️ en_core_web_sm not available for testing")
+    except ImportError:
+        print("❌ Sentence-BERT not available for comparison")
+    except Exception as e:
+        print(f"❌ Error in comparison: {e}")
 
-def get_final_recommendation():
-    """Provide final recommendation based on analysis"""
+class SentenceBertSimilarity:
+    """
+    Advanced Sentence-BERT similarity matcher
+    Replacement for TF-IDF semantic similarity
+    """
     
-    print("\n🎯 Final Recommendation for Aspire Support Chatbot")
-    print("=" * 60)
+    def __init__(self, model_name='all-MiniLM-L6-v2', min_similarity=0.3):
+        """
+        Initialize Sentence-BERT similarity matcher
+        
+        Args:
+            model_name: Sentence-BERT model to use
+            min_similarity: Minimum similarity threshold
+        """
+        self.model_name = model_name
+        self.min_similarity = min_similarity
+        self.model = None
+        self._load_model()
     
-    recommendation = {
-        "recommended_model": "en_core_web_sm",
-        "reasons": [
-            "🚀 Perfect size for web deployment (~15MB)",
-            "⚡ Fast processing for real-time responses",
-            "🎯 Sufficient accuracy for abend code extraction",
-            "💬 Good conversational understanding",
-            "🔧 All needed components (NER, parser, tagger)",
-            "💾 Low memory footprint",
-            "📦 Easy to deploy and maintain",
-            "✅ Already working well in your current setup"
-        ],
-        "alternatives": {
-            "If accuracy is critical": "en_core_web_md (but 3x larger)",
-            "If size is extremely important": "Custom blank model with rules",
-            "If offline deployment needed": "Download and bundle en_core_web_sm"
-        },
-        "installation": "python -m spacy download en_core_web_sm"
+    def _load_model(self):
+        """Load the Sentence-BERT model"""
+        try:
+            from sentence_transformers import SentenceTransformer
+            print(f"📥 Loading Sentence-BERT model: {self.model_name}")
+            self.model = SentenceTransformer(self.model_name)
+            print(f"✅ Model loaded successfully")
+        except ImportError:
+            print("❌ sentence-transformers not installed")
+            self.model = None
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+            self.model = None
+    
+    def find_best_match(self, query: str, candidates: List[str], 
+                       return_score: bool = False) -> Optional[str]:
+        """
+        Find best matching candidate using Sentence-BERT
+        
+        Args:
+            query: Query text
+            candidates: List of candidate texts
+            return_score: Whether to return similarity score
+            
+        Returns:
+            Best matching candidate or (candidate, score) if return_score=True
+        """
+        if not self.model or not query or not candidates:
+            return None
+        
+        try:
+            from sklearn.metrics.pairwise import cosine_similarity
+            
+            # Encode query and candidates
+            all_texts = [query] + candidates
+            embeddings = self.model.encode(all_texts)
+            
+            query_embedding = embeddings[0:1]
+            candidate_embeddings = embeddings[1:]
+            
+            # Calculate similarities
+            similarities = cosine_similarity(query_embedding, candidate_embeddings)[0]
+            
+            # Find best match above threshold
+            best_idx = np.argmax(similarities)
+            best_score = similarities[best_idx]
+            
+            if best_score >= self.min_similarity:
+                best_candidate = candidates[best_idx]
+                if return_score:
+                    return best_candidate, best_score
+                return best_candidate
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error in Sentence-BERT matching: {e}")
+            return None
+    
+    def calculate_similarity(self, text1: str, text2: str) -> float:
+        """Calculate similarity between two texts"""
+        if not self.model or not text1 or not text2:
+            return 0.0
+        
+        try:
+            from sklearn.metrics.pairwise import cosine_similarity
+            
+            embeddings = self.model.encode([text1, text2])
+            similarity = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
+            return float(similarity)
+            
+        except Exception as e:
+            print(f"❌ Error calculating similarity: {e}")
+            return 0.0
+
+def integration_example():
+    """Show how to integrate Sentence-BERT into your chatbot"""
+    
+    print("\n🔧 Integration Example for Your Chatbot")
+    print("=" * 45)
+    
+    integration_code = '''
+# 1. Update requirements.txt
+sentence-transformers>=2.2.0
+
+# 2. Create enhanced_semantic_similarity.py
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+class SentenceBertMatcher:
+    def __init__(self):
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    def find_best_qa_match(self, query, qa_questions):
+        if not qa_questions:
+            return None
+        
+        # Encode query and questions
+        all_texts = [query] + qa_questions
+        embeddings = self.model.encode(all_texts)
+        
+        # Calculate similarities
+        query_emb = embeddings[0:1]
+        question_embs = embeddings[1:]
+        similarities = cosine_similarity(query_emb, question_embs)[0]
+        
+        # Find best match
+        best_idx = np.argmax(similarities)
+        if similarities[best_idx] > 0.5:  # Threshold
+            return qa_questions[best_idx]
+        return None
+
+# 3. Update voice.py ProductionSupportAnalyzer
+class ProductionSupportAnalyzer:
+    def __init__(self):
+        self.sbert_matcher = SentenceBertMatcher()
+    
+    def _find_best_qa_match(self, user_question):
+        candidates = list(self.qa_data.keys())
+        best_match = self.sbert_matcher.find_best_qa_match(
+            user_question, candidates
+        )
+        if best_match:
+            return self.qa_data[best_match]
+        return None
+    '''
+    
+    print("📝 Integration Steps:")
+    print("1. Install: pip install sentence-transformers")
+    print("2. Replace TF-IDF matcher with Sentence-BERT")
+    print("3. Update your ProductionSupportAnalyzer class")
+    print("4. Test with your existing Q&A data")
+    
+    print(f"\n💻 Sample Integration Code:")
+    print(integration_code)
+
+def test_with_your_data():
+    """Test Sentence-BERT with your actual chatbot data"""
+    
+    print("\n🎯 Testing with Your Aspire Support Data")
+    print("=" * 45)
+    
+    # Your actual Q&A data examples
+    qa_pairs = {
+        "what is the relationship between aspire and vto application": 
+            "Aspire and VTO applications are integrated through data exchange APIs...",
+        "how do i reset my password": 
+            "To reset your password, contact the help desk or use the self-service portal...",
+        "what are common abend codes": 
+            "Common abend codes include S0C4 (storage violation), S0C7 (data exception)...",
+        "job is running for long time what might be the reason":
+            "Long running jobs may be caused by resource contention, data volume..."
     }
     
-    print(f"🏆 Recommended Model: {recommendation['recommended_model']}")
-    print("\n📋 Why this model is perfect for your chatbot:")
-    for reason in recommendation['reasons']:
-        print(f"  {reason}")
+    test_queries = [
+        "aspire vto connection",
+        "password reset help", 
+        "common abends",
+        "job running too long",
+        "memory issue production"
+    ]
     
-    print(f"\n📦 Installation Command:")
-    print(f"  {recommendation['installation']}")
-    
-    print(f"\n🔄 Alternative Options:")
-    for scenario, alternative in recommendation['alternatives'].items():
-        print(f"  • {scenario}: {alternative}")
-    
-    print(f"\n✅ Conclusion:")
-    print(f"  Your current en_core_web_sm model is PERFECT for the Aspire Support")
-    print(f"  chatbot. It provides the optimal balance of speed, accuracy, and size")
-    print(f"  for your production support use case. No changes needed!")
+    try:
+        # Test with Sentence-BERT
+        sbert_matcher = SentenceBertSimilarity(min_similarity=0.3)
+        
+        if sbert_matcher.model:
+            print("✅ Testing Sentence-BERT with your data:")
+            
+            questions = list(qa_pairs.keys())
+            
+            for query in test_queries:
+                best_match = sbert_matcher.find_best_match(query, questions, return_score=True)
+                
+                if best_match:
+                    match, score = best_match
+                    answer = qa_pairs[match][:60] + "..."
+                    print(f"\n📝 Query: '{query}'")
+                    print(f"🎯 Match: '{match}' (score: {score:.4f})")
+                    print(f"💬 Answer: {answer}")
+                else:
+                    print(f"\n📝 Query: '{query}'")
+                    print(f"❌ No match found")
+        else:
+            print("❌ Sentence-BERT model not available")
+            
+    except Exception as e:
+        print(f"❌ Error testing with your data: {e}")
 
 def main():
-    """Main function to run the complete analysis"""
+    """Main function to test Sentence-BERT upgrade"""
     
-    print("🤖 spaCy Model Recommendation Analysis")
-    print("🏢 For: Aspire Support Chatbot")
-    print("📅 Analysis Date: 2025-09-18")
+    print("🚀 Sentence-BERT Upgrade for Aspire Support")
+    print("🎯 Better than TF-IDF Semantic Similarity")
     print("=" * 60)
     
-    # Analyze requirements
-    analyze_chatbot_requirements()
+    # Install sentence-transformers
+    if install_sentence_transformers():
+        
+        # Test basic functionality
+        model, embeddings = test_sentence_bert_basic()
+        
+        if model:
+            # Compare with TF-IDF
+            compare_with_tfidf()
+            
+            # Test with your actual data
+            test_with_your_data()
+            
+            # Show integration example
+            integration_example()
+            
+            print(f"\n✅ Sentence-BERT Testing Complete!")
+            print(f"🎉 Ready to upgrade from TF-IDF to Sentence-BERT!")
+        else:
+            print(f"❌ Sentence-BERT testing failed")
+    else:
+        print(f"❌ Installation failed")
     
-    # Compare models
-    compare_spacy_models()
-    
-    # Test performance
-    test_model_performance()
-    
-    # Final recommendation
-    get_final_recommendation()
-    
-    print("\n" + "=" * 60)
-    print("📋 Summary: en_core_web_sm is the optimal choice!")
     print("=" * 60)
 
 if __name__ == "__main__":
