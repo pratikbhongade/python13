@@ -37,31 +37,6 @@ from pathlib import Path
 # Chatbot functionality removed
 
 # ============================================================================
-# ENVIRONMENT CONFIGURATION
-# ============================================================================
-
-# Environment-specific database server configurations
-ENVIRONMENT_CONFIG = {
-    'Prod': {
-        'server': r'SDC01ASRSQPD01S\PSQLINST01',
-        'database': 'ASPIRE',
-        'display_name': 'Production'
-    },
-    'IT': {
-        'server': r'SDC01ASRSQD01S\PSQLINST01',  # Update with actual IT server
-        'database': 'ASPIRE',
-        'display_name': 'IT Testing'
-    },
-    'QV': {
-        'server': r'SDC01ASRSQD02S\PSQLINST01',  # Update with actual QV server
-        'database': 'ASPIRE',
-        'display_name': 'QV Testing'
-    }
-}
-
-logger_env = logging.getLogger(__name__)
-
-# ============================================================================
 # LOGGING CONFIGURATION
 # ============================================================================
 
@@ -383,11 +358,36 @@ def get_last_business_day():
 default_date = get_last_business_day().strftime('%Y-%m-%d')
 logger.info(f"Default date set to: {default_date}")
 
-# Function to fetch data
+# Environment database configuration
+ENVIRONMENT_CONFIG = {
+    'Prod': {
+        'server': r'SDC01ASRSQPD01S\PSQLINST01',
+        'database': 'ASPIRE',
+        'display_name': 'Production',
+        'color': '#28a745'  # Green
+    },
+    'IT': {
+        'server': r'SDC01ASRSQIT01S\PSQLINST01',  # Update with actual IT server
+        'database': 'ASPIRE',
+        'display_name': 'IT Environment',
+        'color': '#17a2b8'  # Teal
+    },
+    'QV': {
+        'server': r'SDC01ASRSQQV01S\PSQLINST01',  # Update with actual QV server
+        'database': 'ASPIRE',
+        'display_name': 'QV Environment',
+        'color': '#ffc107'  # Yellow
+    }
+}
+
+# Default environment
+DEFAULT_ENVIRONMENT = 'Prod'
+
+# Function to fetch data with environment support
 def fetch_data(selected_date, environment='Prod'):
-    logger.info(f"Fetching data for date: {selected_date} from environment: {environment}")
+    logger.info(f"Fetching data for date: {selected_date} from {environment} environment")
     try:
-        # Get environment-specific configuration
+        # Get environment configuration
         env_config = ENVIRONMENT_CONFIG.get(environment, ENVIRONMENT_CONFIG['Prod'])
         
         conn_str = (
@@ -396,9 +396,9 @@ def fetch_data(selected_date, environment='Prod'):
             f"DATABASE={env_config['database']};"
             r'Trusted_Connection=yes;'
         )
-        logger.debug(f"Attempting database connection to {env_config['display_name']}...")
+        logger.debug("Attempting database connection...")
         conn = pyodbc.connect(conn_str)
-        logger.info(f"Database connection successful to {env_config['display_name']}")
+        logger.info("Database connection successful")
 
         query = f"""
         SELECT 
@@ -479,9 +479,9 @@ def fetch_data(selected_date, environment='Prod'):
 # Fetch initial data with enhanced error handling and logging
 logger.info("Fetching initial data...")
 try:
-    df, df_50_days, df_job_duration, df_unlock_online = fetch_data(default_date, 'Prod')
+    df, df_50_days, df_job_duration, df_unlock_online = fetch_data(default_date, DEFAULT_ENVIRONMENT)
     if df is not None:
-        logger.info(f"Initial data loaded successfully for {default_date} from Production")
+        logger.info(f"Initial data loaded successfully for {default_date}")
     else:
         raise Exception("Database query returned None")
 except Exception as e:
@@ -625,22 +625,6 @@ try:
     font-weight: bold !important;
     color: #2A3F5F !important;
 }
-
-/* Environment selector styling */
-#environment-selector {
-    border: 2px solid #28a745;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.2);
-    transition: all 0.3s ease;
-}
-
-#environment-selector:hover {
-    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
-}
-
-.Select-control {
-    border-radius: 8px !important;
-}
 ''')
     logger.info(f"Custom CSS file created: {css_path}")
 except Exception as e:
@@ -666,28 +650,22 @@ app.layout = dbc.Container([
         dbc.Col(html.Img(src='data:image/png;base64,{}'.format(logo_base64), height='60px'), width='auto'),
         dbc.Col(html.H1("AspireVision Dashboard", className='text-center mb-4', style={'font-weight': 'bold', 'color': '#2A3F5F', 'border-bottom': '1px solid #2A3F5F'}), width=True, className='d-flex justify-content-center align-items-center'),
         dbc.Col([
-            html.Div([
-                html.Div("Environment", className='text-center mb-2', style={'font-weight': 'bold'}),
-                html.I(className="fa fa-info-circle", id="env-info-icon", style={"margin-left": "5px", "color": "#17a2b8", "font-size": "12px"})
-            ], style={'display': 'flex', 'align-items': 'center', 'justify-content': 'center'}),
+            html.Div("Environment", className='text-center mb-2', style={'font-weight': 'bold'}),
             dcc.Dropdown(
                 id='environment-selector',
                 options=[
                     {'label': '🟢 Production', 'value': 'Prod'},
-                    {'label': '🔵 IT Testing', 'value': 'IT'},
-                    {'label': '🟡 QV Testing', 'value': 'QV'}
+                    {'label': '🔵 IT Environment', 'value': 'IT'},
+                    {'label': '🟡 QV Environment', 'value': 'QV'}
                 ],
-                value='Prod',
+                value=DEFAULT_ENVIRONMENT,
                 clearable=False,
                 style={
                     'width': '180px',
                     'font-weight': 'bold',
                     'border-radius': '8px'
-                },
-                persistence=True,
-                persistence_type='session'
-            ),
-            dbc.Tooltip("Select database environment to view data from different servers", target="env-info-icon")
+                }
+            )
         ], width='auto', className='d-flex flex-column justify-content-center align-items-center'),
         dbc.Col([
             html.Div("Pick a date", className='text-center mb-2', style={'font-weight': 'bold'}),
@@ -719,6 +697,16 @@ app.layout = dbc.Container([
             dbc.Tooltip("Select a date", target="calendar-icon")
         ], width='auto', className='d-flex justify-content-end align-items-center')
     ], className='border mb-3 align-items-center justify-content-center'),
+    # Environment indicator banner
+    dbc.Row([
+        dbc.Col([
+            html.Div(
+                id='environment-indicator',
+                className='text-center p-2',
+                style={'font-weight': 'bold', 'border-radius': '5px', 'margin-bottom': '10px'}
+            )
+        ], width=12)
+    ]),
     dbc.Tabs([
         dbc.Tab(label='Main Dashboard', tab_id='main-dashboard', children=[
             dbc.Row([
@@ -855,7 +843,30 @@ app.layout = dbc.Container([
     email_preview_modal,
 ], fluid=True, className='p-4 bg-light rounded-3 shadow')
 
-# Callback to update the tables and graphs based on the selected date
+# Callback to update environment indicator
+@app.callback(
+    Output('environment-indicator', 'children'),
+    Output('environment-indicator', 'style'),
+    [Input('environment-selector', 'value')]
+)
+def update_environment_indicator(environment):
+    env_config = ENVIRONMENT_CONFIG.get(environment, ENVIRONMENT_CONFIG['Prod'])
+    indicator_text = f"📊 Connected to: {env_config['display_name']}"
+    
+    style = {
+        'font-weight': 'bold',
+        'border-radius': '5px',
+        'margin-bottom': '10px',
+        'padding': '10px',
+        'background-color': env_config['color'],
+        'color': 'white',
+        'font-size': '14px',
+        'box-shadow': '0 2px 5px rgba(0, 0, 0, 0.2)'
+    }
+    
+    return indicator_text, style
+
+# Callback to update the tables and graphs based on the selected date and environment
 @app.callback(
     [Output('unlock-online-table', 'children'),
      Output('failed-jobs-info', 'children'),
@@ -1875,10 +1886,9 @@ def save_solution(n_clicks, solution_text):
     [Input('send-email-button', 'n_clicks'),
      Input('send-email-confirm', 'n_clicks'),
      Input('send-email-cancel', 'n_clicks')],
-    [State('date-picker-table', 'date'),
-     State('environment-selector', 'value')]
+    [State('date-picker-table', 'date')]
 )
-def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, environment):
+def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date):
     # Identify which button triggered the callback
     ctx = dash.callback_context
     
@@ -1890,7 +1900,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
     if button_id == 'send-email-button' and n_clicks and n_clicks > 0:
         try:
             # Fetch current data for the selected date to get failed jobs
-            df, _, _, _ = fetch_data(selected_date, environment if environment else 'Prod')
+            df, _, _, _ = fetch_data(selected_date)
             
             # Format date and time for display - FIXED DataFrame warnings
             df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
@@ -1928,8 +1938,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
                 'processing_date': selected_date,
                 'benchmark_end_time_formatted': benchmark_end_time_formatted,
                 'failed_jobs': failed_jobs,
-                'solution_text': solution_text,
-                'environment': environment if environment else 'Prod'
+                'solution_text': solution_text
             }
             
             # Open email preview modal
@@ -1950,8 +1959,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
                     data['processing_date'], 
                     data['benchmark_end_time_formatted'], 
                     data['failed_jobs'],
-                    data.get('solution_text', ""),
-                    data.get('environment', 'Prod')
+                    data.get('solution_text', "")
                 )
                 
                 # Send the email
@@ -2120,7 +2128,7 @@ def capture_main_dashboard(selected_date, output_path=None):
     finally:
         driver.quit()
 
-def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_formatted, failed_jobs=None, solution_text=None, environment='Prod'):
+def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_formatted, failed_jobs=None, solution_text=None):
     """
     Send an email with the dashboard screenshot and failed job details
     
@@ -2130,16 +2138,12 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
     - benchmark_end_time_formatted: Formatted time string for the email
     - failed_jobs: DataFrame containing information about failed jobs (optional)
     - solution_text: Text describing the solution/fix applied (optional)
-    - environment: Environment name (Prod, IT, QV) (optional)
     """
     # Create Outlook email
     outlook = win32.Dispatch('outlook.application')
     mail = outlook.CreateItem(0)
     mail.To = 'Pratik_Bhongade@Keybank.com;karen.a.tiemann-wozniak@key.com',
-    
-    # Add environment to subject if not Production
-    env_suffix = f' [{ENVIRONMENT_CONFIG[environment]["display_name"]}]' if environment != 'Prod' else ''
-    mail.Subject = f'AspireVision Dashboard - {processing_date}{env_suffix}'
+    mail.Subject = f'AspireVision Dashboard - {processing_date}'
     
     # Read the image
     try:
@@ -2176,21 +2180,9 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
         </div>
         """
     
-    # Environment indicator for email body
-    env_badge = ''
-    if environment != 'Prod':
-        env_colors = {'IT': '#0d6efd', 'QV': '#ffc107'}
-        env_color = env_colors.get(environment, '#6c757d')
-        env_badge = f'''
-        <div style="background-color: {env_color}; color: white; padding: 8px 15px; border-radius: 5px; display: inline-block; margin-bottom: 10px; font-weight: bold;">
-            🔔 {ENVIRONMENT_CONFIG[environment]["display_name"]} Environment
-        </div>
-        '''
-    
     # MODIFICATION: Updated Email Footer - removed image and disclaimer line
     mail.HTMLBody = f'''
     <p>Hi All,</p>
-    {env_badge}
     <p>Please find the status of Aspire Nightly Batch - <strong>{processing_date}</strong></p>
     <p><strong>Highlight:</strong></p>
     <ul>
@@ -2237,7 +2229,6 @@ def update_email_preview(is_open):
         benchmark_end_time_formatted = data.get('benchmark_end_time_formatted', '')
         failed_jobs = data.get('failed_jobs', pd.DataFrame())
         solution_text = data.get('solution_text', '')
-        environment = data.get('environment', 'Prod')
         
         # Create highlights HTML
         highlights_html = f"<li>Aspire Online Availability at <strong>{benchmark_end_time_formatted}</strong></li>"
@@ -2265,17 +2256,6 @@ def update_email_preview(is_open):
             </div>
             """
         
-        # Environment indicator for email preview
-        env_badge_preview = ''
-        if environment != 'Prod':
-            env_colors = {'IT': '#0d6efd', 'QV': '#ffc107'}
-            env_color = env_colors.get(environment, '#6c757d')
-            env_badge_preview = f'''
-            <div style="background-color: {env_color}; color: white; padding: 8px 15px; border-radius: 5px; display: inline-block; margin-bottom: 10px; font-weight: bold;">
-                🔔 {ENVIRONMENT_CONFIG[environment]["display_name"]} Environment
-            </div>
-            '''
-        
         # MODIFICATION: Updated Email Footer in Preview - removed image and disclaimer line
         html_content = f'''
         <html>
@@ -2287,7 +2267,6 @@ def update_email_preview(is_open):
         </head>
         <body>
             <p>Hi All,</p>
-            {env_badge_preview}
             <p>Please find the status of Aspire Nightly Batch - <strong>{processing_date}</strong></p>
             <p><strong>Highlight:</strong></p>
             <ul>
