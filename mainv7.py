@@ -23,7 +23,6 @@ import win32com.client as win32
 import plotly.express as px
 import plotly.graph_objects as go
 import base64
-import numpy as np
 time.clock = time.time
 import webbrowser
 import logging
@@ -358,47 +357,41 @@ def get_last_business_day():
 default_date = get_last_business_day().strftime('%Y-%m-%d')
 logger.info(f"Default date set to: {default_date}")
 
-# Environment database configuration
-ENVIRONMENT_CONFIG = {
-    'Prod': {
-        'server': r'SDC01ASRSQPD01S\PSQLINST01',
-        'database': 'ASPIRE',
-        'display_name': 'Production',
-        'color': '#28a745'  # Green
+# Database configuration for different environments
+DATABASE_CONFIG = {
+    'PROD': {
+        'SERVER': r'SDC01ASRSQPD01S\PSQLINST01',
+        'DATABASE': 'ASPIRE',
+        'DISPLAY_NAME': 'Production'
     },
     'IT': {
-        'server': r'SDC01ASRSQIT01S\PSQLINST01',  # Update with actual IT server
-        'database': 'ASPIRE',
-        'display_name': 'IT Environment',
-        'color': '#17a2b8'  # Teal
+        'SERVER': r'SDC01ASRSQIT01S\PSQLINST01',  # Update with actual IT server
+        'DATABASE': 'ASPIRE',
+        'DISPLAY_NAME': 'IT Environment'
     },
     'QV': {
-        'server': r'SDC01ASRSQQV01S\PSQLINST01',  # Update with actual QV server
-        'database': 'ASPIRE',
-        'display_name': 'QV Environment',
-        'color': '#ffc107'  # Yellow
+        'SERVER': r'SDC01ASRSQQV01S\PSQLINST01',  # Update with actual QV server
+        'DATABASE': 'ASPIRE',
+        'DISPLAY_NAME': 'QV Environment'
     }
 }
 
-# Default environment
-DEFAULT_ENVIRONMENT = 'Prod'
-
-# Function to fetch data with environment support
-def fetch_data(selected_date, environment='Prod'):
-    logger.info(f"Fetching data for date: {selected_date} from {environment} environment")
+# Function to fetch data
+def fetch_data(selected_date, environment='PROD'):
+    logger.info(f"Fetching data for date: {selected_date}, Environment: {environment}")
     try:
-        # Get environment configuration
-        env_config = ENVIRONMENT_CONFIG.get(environment, ENVIRONMENT_CONFIG['Prod'])
+        # Get database configuration for the selected environment
+        db_config = DATABASE_CONFIG.get(environment, DATABASE_CONFIG['PROD'])
         
         conn_str = (
             r'DRIVER={SQL Server};'
-            f"SERVER={env_config['server']};"
-            f"DATABASE={env_config['database']};"
+            f"SERVER={db_config['SERVER']};"
+            f"DATABASE={db_config['DATABASE']};"
             r'Trusted_Connection=yes;'
         )
-        logger.debug("Attempting database connection...")
+        logger.debug(f"Attempting database connection to {db_config['DISPLAY_NAME']}...")
         conn = pyodbc.connect(conn_str)
-        logger.info("Database connection successful")
+        logger.info(f"Database connection successful to {db_config['DISPLAY_NAME']}")
 
         query = f"""
         SELECT 
@@ -479,7 +472,7 @@ def fetch_data(selected_date, environment='Prod'):
 # Fetch initial data with enhanced error handling and logging
 logger.info("Fetching initial data...")
 try:
-    df, df_50_days, df_job_duration, df_unlock_online = fetch_data(default_date, DEFAULT_ENVIRONMENT)
+    df, df_50_days, df_job_duration, df_unlock_online = fetch_data(default_date)
     if df is not None:
         logger.info(f"Initial data loaded successfully for {default_date}")
     else:
@@ -650,23 +643,26 @@ app.layout = dbc.Container([
         dbc.Col(html.Img(src='data:image/png;base64,{}'.format(logo_base64), height='60px'), width='auto'),
         dbc.Col(html.H1("AspireVision Dashboard", className='text-center mb-4', style={'font-weight': 'bold', 'color': '#2A3F5F', 'border-bottom': '1px solid #2A3F5F'}), width=True, className='d-flex justify-content-center align-items-center'),
         dbc.Col([
-            html.Div("Environment", className='text-center mb-2', style={'font-weight': 'bold'}),
+            html.Div("Select Environment", className='text-center mb-2', style={'font-weight': 'bold'}),
             dcc.Dropdown(
                 id='environment-selector',
                 options=[
-                    {'label': '🟢 Production', 'value': 'Prod'},
+                    {'label': '🟢 Production', 'value': 'PROD'},
                     {'label': '🔵 IT Environment', 'value': 'IT'},
                     {'label': '🟡 QV Environment', 'value': 'QV'}
                 ],
-                value=DEFAULT_ENVIRONMENT,
+                value='PROD',  # Default to Production
                 clearable=False,
                 style={
                     'width': '180px',
                     'font-weight': 'bold',
-                    'border-radius': '8px'
-                }
-            )
-        ], width='auto', className='d-flex flex-column justify-content-center align-items-center'),
+                    'font-size': '14px'
+                },
+                persistence=True,
+                persistence_type='session'
+            ),
+            dbc.Tooltip("Select Database Environment", target="environment-selector")
+        ], width='auto', className='d-flex flex-column align-items-center'),
         dbc.Col([
             html.Div("Pick a date", className='text-center mb-2', style={'font-weight': 'bold'}),
             html.Div([
@@ -697,16 +693,6 @@ app.layout = dbc.Container([
             dbc.Tooltip("Select a date", target="calendar-icon")
         ], width='auto', className='d-flex justify-content-end align-items-center')
     ], className='border mb-3 align-items-center justify-content-center'),
-    # Environment indicator banner
-    dbc.Row([
-        dbc.Col([
-            html.Div(
-                id='environment-indicator',
-                className='text-center p-2',
-                style={'font-weight': 'bold', 'border-radius': '5px', 'margin-bottom': '10px'}
-            )
-        ], width=12)
-    ]),
     dbc.Tabs([
         dbc.Tab(label='Main Dashboard', tab_id='main-dashboard', children=[
             dbc.Row([
@@ -843,30 +829,7 @@ app.layout = dbc.Container([
     email_preview_modal,
 ], fluid=True, className='p-4 bg-light rounded-3 shadow')
 
-# Callback to update environment indicator
-@app.callback(
-    Output('environment-indicator', 'children'),
-    Output('environment-indicator', 'style'),
-    [Input('environment-selector', 'value')]
-)
-def update_environment_indicator(environment):
-    env_config = ENVIRONMENT_CONFIG.get(environment, ENVIRONMENT_CONFIG['Prod'])
-    indicator_text = f"📊 Connected to: {env_config['display_name']}"
-    
-    style = {
-        'font-weight': 'bold',
-        'border-radius': '5px',
-        'margin-bottom': '10px',
-        'padding': '10px',
-        'background-color': env_config['color'],
-        'color': 'white',
-        'font-size': '14px',
-        'box-shadow': '0 2px 5px rgba(0, 0, 0, 0.2)'
-    }
-    
-    return indicator_text, style
-
-# Callback to update the tables and graphs based on the selected date and environment
+# Callback to update the tables and graphs based on the selected date
 @app.callback(
     [Output('unlock-online-table', 'children'),
      Output('failed-jobs-info', 'children'),
@@ -1192,255 +1155,12 @@ def update_dashboard(selected_date, environment):
         ], bordered=True, striped=True, hover=True)
         fig_time_diff = px.line(title='No data available for time difference analysis.')
 
-    # Create Enhanced Job Duration Analysis (6 months of data)
+    # Create Job Duration graph (only for the Job Duration Analysis tab)
     if not df_job_duration.empty:
-        try:
-            logger.debug("Creating enhanced job duration analysis")
-            
-            # Calculate comprehensive statistics per job
-            job_stats = df_job_duration.groupby('JobName')['DurationMinutes'].agg([
-                ('AvgDuration', 'mean'),
-                ('MedianDuration', 'median'),
-                ('StdDuration', 'std'),
-                ('MinDuration', 'min'),
-                ('MaxDuration', 'max'),
-                ('TotalRuns', 'count')
-            ]).reset_index()
-            
-            # Calculate daily averages for trend analysis
-            daily_avg = df_job_duration.groupby(['ProcessingDate', 'JobName'])['DurationMinutes'].mean().reset_index()
-            daily_avg['ProcessingDate'] = pd.to_datetime(daily_avg['ProcessingDate'])
-            
-            # Calculate trend slopes for each job (performance degradation detection)
-            job_trends = {}
-            for job_name in daily_avg['JobName'].unique():
-                job_data = daily_avg[daily_avg['JobName'] == job_name].sort_values('ProcessingDate')
-                if len(job_data) > 5:  # Need at least 5 data points for trend
-                    x_numeric = (job_data['ProcessingDate'] - job_data['ProcessingDate'].min()).dt.days
-                    slope = np.polyfit(x_numeric, job_data['DurationMinutes'], 1)[0]
-                    job_trends[job_name] = slope
-                else:
-                    job_trends[job_name] = 0
-            
-            # Create subplots for comprehensive analysis
-            from plotly.subplots import make_subplots
-            
-            fig_job_duration = make_subplots(
-                rows=2, cols=2,
-                subplot_titles=(
-                    'Job Duration Trends Over Time (6 Months)',
-                    'Average Duration by Job',
-                    'Duration Variability Analysis',
-                    'Performance Trend Analysis'
-                ),
-                specs=[[{"secondary_y": False}, {"secondary_y": False}],
-                       [{"secondary_y": False}, {"secondary_y": False}]]
-            )
-            
-            # Color palette for jobs
-            colors = px.colors.qualitative.Set3
-            job_color_map = {job: colors[i % len(colors)] for i, job in enumerate(daily_avg['JobName'].unique())}
-            
-            # 1. Main trend lines (top-left)
-            for job_name in daily_avg['JobName'].unique():
-                job_data = daily_avg[daily_avg['JobName'] == job_name].sort_values('ProcessingDate')
-                
-                fig_job_duration.add_trace(
-                    go.Scatter(
-                        x=job_data['ProcessingDate'],
-                        y=job_data['DurationMinutes'],
-                        mode='lines+markers',
-                        name=job_name,
-                        line=dict(color=job_color_map[job_name], width=2),
-                        marker=dict(size=4),
-                        hovertemplate=(
-                            '<b>%{fullData.name}</b><br>'
-                            'Date: %{x}<br>'
-                            'Duration: %{y:.1f} minutes<extra></extra>'
-                        )
-                    ),
-                    row=1, col=1
-                )
-            
-            # 2. Average duration bar chart (top-right)
-            job_stats_sorted = job_stats.sort_values('AvgDuration', ascending=True)
-            
-            fig_job_duration.add_trace(
-                go.Bar(
-                    x=job_stats_sorted['AvgDuration'],
-                    y=job_stats_sorted['JobName'],
-                    orientation='h',
-                    name='Avg Duration',
-                    marker=dict(color='lightblue', line=dict(color='darkblue', width=1)),
-                    text=job_stats_sorted['AvgDuration'].round(1).astype(str) + ' min',
-                    textposition='outside',
-                    hovertemplate=(
-                        '<b>%{y}</b><br>'
-                        'Average Duration: %{x:.1f} minutes<br>'
-                        'Total Runs: %{customdata}<extra></extra>'
-                    ),
-                    customdata=job_stats_sorted['TotalRuns']
-                ),
-                row=1, col=2
-            )
-            
-            # 3. Duration variability (bottom-left) - Box plot showing consistency
-            for job_name in df_job_duration['JobName'].unique():
-                job_data = df_job_duration[df_job_duration['JobName'] == job_name]
-                
-                fig_job_duration.add_trace(
-                    go.Box(
-                        y=job_data['DurationMinutes'],
-                        name=job_name,
-                        marker=dict(color=job_color_map[job_name]),
-                        boxpoints='outliers',
-                        hovertemplate=(
-                            '<b>%{fullData.name}</b><br>'
-                            'Q1: %{q1:.1f} min<br>'
-                            'Median: %{median:.1f} min<br>'
-                            'Q3: %{q3:.1f} min<br>'
-                            'Duration: %{y:.1f} min<extra></extra>'
-                        )
-                    ),
-                    row=2, col=1
-                )
-            
-            # 4. Performance trend indicators (bottom-right)
-            trend_data = []
-            for job_name, slope in job_trends.items():
-                job_stat = job_stats[job_stats['JobName'] == job_name].iloc[0]
-                trend_data.append({
-                    'JobName': job_name,
-                    'TrendSlope': slope,
-                    'AvgDuration': job_stat['AvgDuration'],
-                    'TotalRuns': job_stat['TotalRuns'],
-                    'TrendCategory': 'Degrading' if slope > 0.1 else 'Improving' if slope < -0.1 else 'Stable'
-                })
-            
-            trend_df = pd.DataFrame(trend_data)
-            
-            # Scatter plot: X=Average Duration, Y=Trend Slope, Size=Total Runs
-            trend_colors = {'Degrading': '#dc3545', 'Stable': '#28a745', 'Improving': '#17a2b8'}
-            
-            for category in ['Degrading', 'Stable', 'Improving']:
-                cat_data = trend_df[trend_df['TrendCategory'] == category]
-                if not cat_data.empty:
-                    fig_job_duration.add_trace(
-                        go.Scatter(
-                            x=cat_data['AvgDuration'],
-                            y=cat_data['TrendSlope'],
-                            mode='markers+text',
-                            name=f'{category} ({len(cat_data)})',
-                            marker=dict(
-                                size=cat_data['TotalRuns'] / 5,  # Scale bubble size
-                                color=trend_colors[category],
-                                opacity=0.7,
-                                line=dict(width=2, color='white')
-                            ),
-                            text=cat_data['JobName'].str.replace(' ', '<br>'),
-                            textposition='middle center',
-                            textfont=dict(size=8, color='white'),
-                            hovertemplate=(
-                                '<b>%{text}</b><br>'
-                                'Avg Duration: %{x:.1f} min<br>'
-                                'Trend Slope: %{y:.3f} min/day<br>'
-                                'Total Runs: %{customdata}<br>'
-                                'Category: %{fullData.name}<extra></extra>'
-                            ),
-                            customdata=cat_data['TotalRuns']
-                        ),
-                        row=2, col=2
-                    )
-            
-            # Add trend reference lines
-            fig_job_duration.add_hline(y=0, line_dash="dot", line_color="gray", row=2, col=2)
-            fig_job_duration.add_hline(y=0.1, line_dash="dot", line_color="red", opacity=0.5, row=2, col=2)
-            fig_job_duration.add_hline(y=-0.1, line_dash="dot", line_color="green", opacity=0.5, row=2, col=2)
-            
-            # Update subplot layouts
-            fig_job_duration.update_xaxes(title_text="Date", row=1, col=1)
-            fig_job_duration.update_yaxes(title_text="Duration (minutes)", row=1, col=1)
-            
-            fig_job_duration.update_xaxes(title_text="Average Duration (minutes)", row=1, col=2)
-            fig_job_duration.update_yaxes(title_text="Job Name", row=1, col=2)
-            
-            fig_job_duration.update_xaxes(title_text="Job Name", row=2, col=1)
-            fig_job_duration.update_yaxes(title_text="Duration (minutes)", row=2, col=1)
-            
-            fig_job_duration.update_xaxes(title_text="Average Duration (minutes)", row=2, col=2)
-            fig_job_duration.update_yaxes(title_text="Performance Trend (min/day)", row=2, col=2)
-            
-            # Overall layout
-            fig_job_duration.update_layout(
-                title={
-                    'text': 'Comprehensive Job Duration Analysis - Last 6 Months',
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'font': {'size': 18, 'color': '#2A3F5F'}
-                },
-                height=800,
-                showlegend=True,
-                template="plotly_white",
-                margin=dict(l=60, r=60, t=100, b=60),
-                plot_bgcolor='rgba(248,249,250,1)',
-                legend=dict(
-                    orientation='v',
-                    yanchor='top',
-                    y=1,
-                    xanchor='left',
-                    x=1.02,
-                    bgcolor='rgba(255,255,255,0.8)',
-                    bordercolor='gray',
-                    borderwidth=1
-                )
-            )
-            
-            # Add insights annotation
-            degrading_jobs = [job for job, slope in job_trends.items() if slope > 0.1]
-            improving_jobs = [job for job, slope in job_trends.items() if slope < -0.1]
-            slowest_job = job_stats.loc[job_stats['AvgDuration'].idxmax(), 'JobName']
-            fastest_job = job_stats.loc[job_stats['AvgDuration'].idxmin(), 'JobName']
-            
-            fig_job_duration.add_annotation(
-                text=(
-                    f"<b>Key Insights:</b><br>"
-                    f"• Slowest Job: {slowest_job}<br>"
-                    f"• Fastest Job: {fastest_job}<br>"
-                    f"• Degrading Performance: {len(degrading_jobs)} jobs<br>"
-                    f"• Improving Performance: {len(improving_jobs)} jobs<br>"
-                    f"• Analysis Period: 6 months"
-                ),
-                xref="paper", yref="paper",
-                x=0.02, y=0.98,
-                xanchor='left', yanchor='top',
-                showarrow=False,
-                font=dict(size=10, color="#2A3F5F"),
-                bgcolor="rgba(255,255,255,0.9)",
-                bordercolor="gray",
-                borderwidth=1
-            )
-            
-            logger.info(f"Job duration analysis completed for {len(job_stats)} jobs over 6 months")
-            
-        except Exception as e:
-            logger.error(f"Error in job duration analysis: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            # Fallback to simple line chart
-            avg_duration = df_job_duration.groupby(['ProcessingDate', 'JobName'])['DurationMinutes'].mean().reset_index()
-            fig_job_duration = px.line(avg_duration, x='ProcessingDate', y='DurationMinutes', color='JobName', title='Job Duration Over Time (Fallback)')
+        avg_duration = df_job_duration.groupby(['ProcessingDate', 'JobName'])['DurationMinutes'].mean().reset_index()
+        fig_job_duration = px.line(avg_duration, x='ProcessingDate', y='DurationMinutes', color='JobName', title='Average Job Duration Over Time')
     else:
-        fig_job_duration = go.Figure()
-        fig_job_duration.add_annotation(
-            text="No job duration data available for the last 6 months",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5, xanchor='center', yanchor='middle',
-            showarrow=False,
-            font=dict(size=16, color="gray")
-        )
-        fig_job_duration.update_layout(
-            title="Job Duration Analysis - No Data Available",
-            template="plotly_white"
-        )
+        fig_job_duration = px.line(title='No job duration data available')
 
     # Performance Metrics functionality removed
 
@@ -1449,10 +1169,10 @@ def update_dashboard(selected_date, environment):
         try:
             logger.debug("Creating enhanced anomaly detection with expected completion times")
             
-            # Filter out "12. Aging Calculations" job from the anomaly detection data
-            df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
+        # Filter out "12. Aging Calculations" job from the anomaly detection data
+        df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
             
-            if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
+        if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
                 # Calculate expected completion times (mean duration per job)
                 job_expected_durations = df_50_days_filtered.groupby('JobName')['DurationMinutes'].agg([
                     ('ExpectedDuration', 'mean'),
@@ -1723,7 +1443,7 @@ def update_dashboard(selected_date, environment):
                 for severity in ['Critical', 'High', 'Medium', 'Low']:
                     severity_data = recovery_events[recovery_events['Severity'] == severity]
                     if not severity_data.empty:
-                                    fig_time_recovery.add_trace(go.Scatter(
+            fig_time_recovery.add_trace(go.Scatter(
                             x=severity_data['EndTime'],
                             y=severity_data['TimeGapMinutes'],
                             mode='markers',
@@ -1734,7 +1454,7 @@ def update_dashboard(selected_date, environment):
                                 symbol='circle',
                                 line=dict(width=2, color='white')
                             ),
-                            hovertemplate=(
+                hovertemplate=(
                                 '<b>Job:</b> %{customdata[0]}<br>'
                                 '<b>Status:</b> %{customdata[1]}<br>'
                                 '<b>Failure Type:</b> %{customdata[2]}<br>'
@@ -1767,7 +1487,7 @@ def update_dashboard(selected_date, environment):
                 )
                 
                 # Enhanced layout
-                fig_time_recovery.update_layout(
+            fig_time_recovery.update_layout(
                     title={
                         'text': 'Job Recovery Time Analysis - Last 50 Days',
                         'x': 0.5,
@@ -1776,23 +1496,23 @@ def update_dashboard(selected_date, environment):
                     },
                     xaxis_title='Job End Time',
                     yaxis_title='Recovery Time (minutes)',
-                    template="plotly_white",
+                template="plotly_white",
                     hovermode='closest',
-                    xaxis=dict(
+                xaxis=dict(
                         type='date',
                         tickformat='%m/%d %H:%M',
-                        showgrid=True,
+                    showgrid=True,
                         gridcolor='lightgray',
                         tickangle=-45,
                         title_standoff=25
-                    ),
-                    yaxis=dict(
-                        showgrid=True,
+                ),
+                yaxis=dict(
+                    showgrid=True,
                         gridcolor='lightgray',
                         rangemode='tozero',
                         title_standoff=15
-                    ),
-                    legend=dict(
+                ),
+                legend=dict(
                         orientation='v',
                         yanchor='top',
                         y=1,
@@ -1803,8 +1523,8 @@ def update_dashboard(selected_date, environment):
                         borderwidth=1
                     ),
                     margin=dict(l=60, r=120, t=80, b=100),
-                    hoverlabel=dict(
-                        bgcolor="white",
+                hoverlabel=dict(
+                    bgcolor="white",
                         font_size=11,
                         font_family="Arial",
                         bordercolor='gray'
@@ -1814,7 +1534,7 @@ def update_dashboard(selected_date, environment):
                 
                 logger.info(f"Recovery analysis completed: {len(recovery_events)} recovery events found")
                 
-            else:
+        else:
                 fig_time_recovery = go.Figure()
                 fig_time_recovery.add_annotation(
                     text="No recovery events detected in the last 50 days",
@@ -1886,9 +1606,10 @@ def save_solution(n_clicks, solution_text):
     [Input('send-email-button', 'n_clicks'),
      Input('send-email-confirm', 'n_clicks'),
      Input('send-email-cancel', 'n_clicks')],
-    [State('date-picker-table', 'date')]
+    [State('date-picker-table', 'date'),
+     State('environment-selector', 'value')]
 )
-def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date):
+def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, environment):
     # Identify which button triggered the callback
     ctx = dash.callback_context
     
@@ -1900,7 +1621,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date):
     if button_id == 'send-email-button' and n_clicks and n_clicks > 0:
         try:
             # Fetch current data for the selected date to get failed jobs
-            df, _, _, _ = fetch_data(selected_date)
+            df, _, _, _ = fetch_data(selected_date, environment)
             
             # Format date and time for display - FIXED DataFrame warnings
             df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
