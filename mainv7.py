@@ -33,6 +33,16 @@ import threading
 import traceback
 from pathlib import Path
 
+# Import configuration
+try:
+    from config import DATABASE_CONFIG, EMAIL_CONFIG, APP_CONFIG, PATHS_CONFIG
+    CONFIG_LOADED = True
+except ImportError as e:
+    print(f"Warning: Could not load config.py: {e}")
+    print("Using fallback configuration...")
+    CONFIG_LOADED = False
+    # Fallback configuration will be defined below
+
 # Chatbot functionality removed
 
 # ============================================================================
@@ -357,24 +367,42 @@ def get_last_business_day():
 default_date = get_last_business_day().strftime('%Y-%m-%d')
 logger.info(f"Default date set to: {default_date}")
 
-# Database configuration for different environments
-DATABASE_CONFIG = {
-    'PROD': {
-        'SERVER': r'SDC01ASRSQPD01S\PSQLINST01',
-        'DATABASE': 'ASPIRE',
-        'DISPLAY_NAME': 'Production'
-    },
-    'IT': {
-        'SERVER': r'SDC01ASRSQIT01S\PSQLINST01',  # Update with actual IT server
-        'DATABASE': 'ASPIRE',
-        'DISPLAY_NAME': 'IT Environment'
-    },
-    'QV': {
-        'SERVER': r'SDC01ASRSQQV01S\PSQLINST01',  # Update with actual QV server
-        'DATABASE': 'ASPIRE',
-        'DISPLAY_NAME': 'QV Environment'
+# Database configuration (loaded from config.py or fallback)
+if not CONFIG_LOADED:
+    # Fallback configuration if config.py is not available
+    DATABASE_CONFIG = {
+        'PROD': {
+            'SERVER': r'SDC01ASRSQPD01S\PSQLINST01',
+            'DATABASE': 'ASPIRE',
+            'DISPLAY_NAME': 'Production',
+            'DRIVER': '{SQL Server}',
+            'TRUSTED_CONNECTION': 'yes'
+        },
+        'IT': {
+            'SERVER': r'SDC01ASRSQIT01S\PSQLINST01',
+            'DATABASE': 'ASPIRE',
+            'DISPLAY_NAME': 'IT Environment',
+            'DRIVER': '{SQL Server}',
+            'TRUSTED_CONNECTION': 'yes'
+        },
+        'QV': {
+            'SERVER': r'SDC01ASRSQQV01S\PSQLINST01',
+            'DATABASE': 'ASPIRE',
+            'DISPLAY_NAME': 'QV Environment',
+            'DRIVER': '{SQL Server}',
+            'TRUSTED_CONNECTION': 'yes'
+        }
     }
-}
+    EMAIL_CONFIG = {
+        'TO_ADDRESSES': ['Pratik_Bhongade@Keybank.com', 'karen.a.tiemann-wozniak@key.com'],
+        'SENDER': {
+            'NAME': 'Pratik Bhongade',
+            'TITLE': 'Software Engineer',
+            'DEPARTMENT': 'KTO CBTO Equipment Finance',
+            'LOCATION': 'Pune, India',
+            'EMAIL': 'Pratik_Bhongade@key.com'
+        }
+    }
 
 # Function to fetch data
 def fetch_data(selected_date, environment='PROD'):
@@ -384,10 +412,10 @@ def fetch_data(selected_date, environment='PROD'):
         db_config = DATABASE_CONFIG.get(environment, DATABASE_CONFIG['PROD'])
         
         conn_str = (
-            r'DRIVER={SQL Server};'
+            f"DRIVER={db_config.get('DRIVER', '{SQL Server}')};"
             f"SERVER={db_config['SERVER']};"
             f"DATABASE={db_config['DATABASE']};"
-            r'Trusted_Connection=yes;'
+            f"Trusted_Connection={db_config.get('TRUSTED_CONNECTION', 'yes')};"
         )
         logger.debug(f"Attempting database connection to {db_config['DISPLAY_NAME']}...")
         conn = pyodbc.connect(conn_str)
@@ -1461,8 +1489,8 @@ def update_dashboard(selected_date, environment):
                 # Trend line removed - was connecting different job types and creating confusion
                 
                 # Add threshold lines for reference
-                # Add threshold lines for reference
                 fig_time_recovery.add_hline(
+                    y=5, line_dash="dot", line_color="gray",
                     annotation_text="Normal Threshold (5 min)",
                     annotation_position="bottom right"
                 )
@@ -1789,36 +1817,28 @@ def capture_main_dashboard(selected_date, output_path=None):
         # Wait for data to load
         time.sleep(10)
         
-        # MINIMALIST SOLUTION:
-        # 1. Keep only the content we want
+        # Remove send email button
         driver.execute_script("""
-            // Remove the send email button row
             var sendBtn = document.getElementById('send-email-row');
             if (sendBtn) sendBtn.remove();
-            
-            // Simple but effective: hide all elements after the tabs
-            var tabs = document.querySelector('.tabs');
-            var nextSibling = tabs.nextElementSibling;
-            while (nextSibling) {
-                var temp = nextSibling.nextElementSibling;
-                if (nextSibling.id !== 'send-email-row') {
-                    nextSibling.style.display = 'none';
-                }
-                nextSibling = temp;
-            }
-            
-            // Hide all other tabs
-            document.querySelectorAll('.tab-pane').forEach(function(tab) {
-                if (tab.id !== 'tab-main-dashboard') {
-                    tab.style.display = 'none';
-                }
-            });
         """)
         
         # Wait for changes to apply
         time.sleep(1)
         
-        # Take the screenshot
+        # Get the full page height of the main dashboard tab content
+        total_height = driver.execute_script("""
+            var mainDashboard = document.getElementById('tab-main-dashboard');
+            return mainDashboard ? mainDashboard.scrollHeight : document.body.scrollHeight;
+        """)
+        
+        # Set viewport to full height to capture everything
+        driver.set_window_size(1920, total_height + 200)  # Add 200px padding
+        
+        # Wait for resize
+        time.sleep(1)
+        
+        # Take the full screenshot
         driver.save_screenshot(output_path)
         
         print(f"Dashboard screenshot saved to {output_path}")
@@ -1850,8 +1870,9 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
     # Create Outlook email
     outlook = win32.Dispatch('outlook.application')
     mail = outlook.CreateItem(0)
-    mail.To = 'Pratik_Bhongade@Keybank.com;karen.a.tiemann-wozniak@key.com',
-    mail.Subject = f'AspireVision Dashboard - {processing_date}'
+    # Use email addresses from config
+    mail.To = ';'.join(EMAIL_CONFIG['TO_ADDRESSES'])
+    mail.Subject = EMAIL_CONFIG.get('SUBJECT_TEMPLATE', 'AspireVision Dashboard - {date}').format(date=processing_date)
     
     # Read the image
     try:
@@ -1903,10 +1924,10 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
     <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 10px; margin-top: 10px;">
         <tr>
             <td style="vertical-align: top;">
-                <strong style="color: #086C49;">Pratik Bhongade</strong><br>
-                <span style="color: #666666;">Software Engineer</span><br>
-                <span style="color: #666666;">KTO CBTO Equipment Finance | Pune, India</span><br>
-                <a href="mailto:Pratik_Bhongade@key.com" style="color: #086C49; text-decoration: none;">Pratik_Bhongade@key.com</a><br>
+                <strong style="color: #086C49;">{EMAIL_CONFIG['SENDER']['NAME']}</strong><br>
+                <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['TITLE']}</span><br>
+                <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['DEPARTMENT']} | {EMAIL_CONFIG['SENDER']['LOCATION']}</span><br>
+                <a href="mailto:{EMAIL_CONFIG['SENDER']['EMAIL']}" style="color: #086C49; text-decoration: none;">{EMAIL_CONFIG['SENDER']['EMAIL']}</a><br>
             </td>
         </tr>
     </table>
@@ -1989,10 +2010,10 @@ def update_email_preview(is_open):
             <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 10px; margin-top: 10px;">
                 <tr>
                     <td style="vertical-align: top;">
-                        <strong style="color: #086C49;">Pratik Bhongade</strong><br>
-                        <span style="color: #666666;">Software Engineer</span><br>
-                        <span style="color: #666666;">KTO CBTO Equipment Finance | Pune, India</span><br>
-                        <a href="mailto:Pratik_Bhongade@key.com" style="color: #086C49; text-decoration: none;">Pratik_Bhongade@key.com</a><br>
+                        <strong style="color: #086C49;">{EMAIL_CONFIG['SENDER']['NAME']}</strong><br>
+                        <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['TITLE']}</span><br>
+                        <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['DEPARTMENT']} | {EMAIL_CONFIG['SENDER']['LOCATION']}</span><br>
+                        <a href="mailto:{EMAIL_CONFIG['SENDER']['EMAIL']}" style="color: #086C49; text-decoration: none;">{EMAIL_CONFIG['SENDER']['EMAIL']}</a><br>
                     
                     </td>
                 </tr>
