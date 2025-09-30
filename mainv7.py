@@ -1169,10 +1169,10 @@ def update_dashboard(selected_date, environment):
         try:
             logger.debug("Creating enhanced anomaly detection with expected completion times")
             
-        # Filter out "12. Aging Calculations" job from the anomaly detection data
-        df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
+            # Filter out "12. Aging Calculations" job from the anomaly detection data
+            df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
             
-        if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
+            if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
                 # Calculate expected completion times (mean duration per job)
                 job_expected_durations = df_50_days_filtered.groupby('JobName')['DurationMinutes'].agg([
                     ('ExpectedDuration', 'mean'),
@@ -1327,20 +1327,7 @@ def update_dashboard(selected_date, environment):
                         title="Job Duration Anomaly Detection - No Anomalies Found",
                         template="plotly_white"
                     )
-            else:
-                fig_anomaly_detection = go.Figure()
-                fig_anomaly_detection.add_annotation(
-                    text="Insufficient data for anomaly detection",
-                    xref="paper", yref="paper",
-                    x=0.5, y=0.5, xanchor='center', yanchor='middle',
-                    showarrow=False,
-                    font=dict(size=16, color="gray")
-                )
-                fig_anomaly_detection.update_layout(
-                    title="Job Duration Anomaly Detection - Insufficient Data",
-                    template="plotly_white"
-                )
-                
+                    
         except Exception as e:
             logger.error(f"Error in anomaly detection: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
@@ -1443,7 +1430,7 @@ def update_dashboard(selected_date, environment):
                 for severity in ['Critical', 'High', 'Medium', 'Low']:
                     severity_data = recovery_events[recovery_events['Severity'] == severity]
                     if not severity_data.empty:
-            fig_time_recovery.add_trace(go.Scatter(
+                        fig_time_recovery.add_trace(go.Scatter(
                             x=severity_data['EndTime'],
                             y=severity_data['TimeGapMinutes'],
                             mode='markers',
@@ -1452,9 +1439,9 @@ def update_dashboard(selected_date, environment):
                                 size=12,
                                 color=severity_colors[severity],
                                 symbol='circle',
-                                line=dict(width=2, color='white')
+                                                                line=dict(width=2, color='white')
                             ),
-                hovertemplate=(
+                            hovertemplate=(
                                 '<b>Job:</b> %{customdata[0]}<br>'
                                 '<b>Status:</b> %{customdata[1]}<br>'
                                 '<b>Failure Type:</b> %{customdata[2]}<br>'
@@ -1474,8 +1461,8 @@ def update_dashboard(selected_date, environment):
                 # Trend line removed - was connecting different job types and creating confusion
                 
                 # Add threshold lines for reference
+                # Add threshold lines for reference
                 fig_time_recovery.add_hline(
-                    y=5, line_dash="dot", line_color="gray",
                     annotation_text="Normal Threshold (5 min)",
                     annotation_position="bottom right"
                 )
@@ -1487,7 +1474,7 @@ def update_dashboard(selected_date, environment):
                 )
                 
                 # Enhanced layout
-            fig_time_recovery.update_layout(
+                fig_time_recovery.update_layout(
                     title={
                         'text': 'Job Recovery Time Analysis - Last 50 Days',
                         'x': 0.5,
@@ -1534,7 +1521,7 @@ def update_dashboard(selected_date, environment):
                 
                 logger.info(f"Recovery analysis completed: {len(recovery_events)} recovery events found")
                 
-        else:
+            else:
                 fig_time_recovery = go.Figure()
                 fig_time_recovery.add_annotation(
                     text="No recovery events detected in the last 50 days",
