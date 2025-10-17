@@ -878,80 +878,87 @@ app.layout = dbc.Container([
      Input('url', 'href')]
 )
 def update_dashboard(selected_date, environment, href):
-    # Sync env/date from URL query params if present
     try:
-        if href:
-            parsed = urllib.parse.urlparse(href)
-            q = urllib.parse.parse_qs(parsed.query)
-            env_q = q.get('env', [None])[0]
-            date_q = q.get('date', [None])[0]
-            if env_q in DATABASE_CONFIG:
-                environment = env_q
-            if date_q:
-                selected_date = date_q
-    except Exception:
-        pass
+        # Sync env/date from URL query params if present
+        try:
+            if href:
+                parsed = urllib.parse.urlparse(href)
+                q = urllib.parse.parse_qs(parsed.query)
+                env_q = q.get('env', [None])[0]
+                date_q = q.get('date', [None])[0]
+                if env_q in DATABASE_CONFIG:
+                    environment = env_q
+                if date_q:
+                    selected_date = date_q
+        except Exception:
+            pass
 
-    # Defensive: selected_date may be None on initial render
-    if not selected_date:
-        logger.info("No selected_date provided; returning empty visuals")
-        message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
-        empty_fig = px.bar()
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
-    now = datetime.now()
-    selected_date_obj = datetime.strptime(selected_date, '%Y-%m-%d')
-    
-    # Check if the selected date is a weekend, future date, or before 9 PM today
-    if selected_date_obj.weekday() >= 5 or selected_date_obj > now or (selected_date == now.strftime('%Y-%m-%d') and now.hour < 21):
-        if selected_date_obj.weekday() >= 5:
-            message = html.Div(
-                [
-                    html.H4("No data available due to holidays or weekends", className='text-center text-danger')
-                ]
-            )
-        elif selected_date_obj > now:
-            message = html.Div(
-                [
-                    html.H4("Batch yet to start", className='text-center text-danger')
-                ]
-            )
-        else:
-            message = html.Div(
-                [
-                    html.H4("Batch yet to start", className='text-center text-danger')
-                ]
-            )
+        # Defensive: selected_date may be None on initial render
+        if not selected_date:
+            logger.info("No selected_date provided; returning empty visuals")
+            message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
+            empty_fig = px.bar()
+            return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
-        empty_fig = px.bar()
-        # Return empty failed jobs info as the second output
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+        now = datetime.now()
+        selected_date_obj = datetime.strptime(selected_date, '%Y-%m-%d')
+        
+        # Check if the selected date is a weekend, future date, or before 9 PM today
+        if selected_date_obj.weekday() >= 5 or selected_date_obj > now or (selected_date == now.strftime('%Y-%m-%d') and now.hour < 21):
+            if selected_date_obj.weekday() >= 5:
+                message = html.Div([html.H4("No data available due to holidays or weekends", className='text-center text-danger')])
+            elif selected_date_obj > now:
+                message = html.Div([html.H4("Batch yet to start", className='text-center text-danger')])
+            else:
+                message = html.Div([html.H4("Batch yet to start", className='text-center text-danger')])
 
-    try:
-        df, df_50_days, df_job_duration, df_unlock_online = fetch_data(selected_date, environment)
+            empty_fig = px.bar()
+            return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
+
+        try:
+            df, df_50_days, df_job_duration, df_unlock_online = fetch_data(selected_date, environment)
+        except Exception as e:
+            error_message = html.Div([
+                html.H4("Database Connection Error", className='text-center text-danger'),
+                html.P(f"Could not connect to database: {str(e)}", className='text-center')
+            ])
+            empty_fig = px.bar()
+            return error_message, None, error_message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
+
+        # Defensive: handle None returns to avoid NoneType errors
+        if df is None or df_50_days is None or df_job_duration is None or df_unlock_online is None:
+            logger.warning(f"fetch_data returned None (env={environment}, date={selected_date}); returning empty visuals")
+            message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
+            empty_fig = px.bar()
+            return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
+
+        if df.empty:
+            logger.info(f"No data returned for env={environment}, date={selected_date}")
+            message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
+            empty_fig = px.bar()
+            return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
+        
+        # ... rest of function unchanged ...
+        
+        # Calculate job duration and format times for display - FIXED DataFrame warnings
+        df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
+        df.loc[:, 'Duration'] = df['Duration'].round(2).astype(str) + ' mins'
+        
+        df.loc[:, 'StartDate'] = pd.to_datetime(df['StartTime']).dt.strftime('%Y-%m-%d')
+        df.loc[:, 'StartTime'] = pd.to_datetime(df['StartTime']).dt.strftime('%I:%M:%S %p')
+        df.loc[:, 'EndDate'] = pd.to_datetime(df['EndTime']).dt.strftime('%Y-%m-%d')
+        df.loc[:, 'EndTime'] = pd.to_datetime(df['EndTime']).dt.strftime('%I:%M:%S %p')
+
+        if not df_unlock_online.empty:
+            df_unlock_online.loc[:, 'CompletionTime'] = pd.to_datetime(df_unlock_online['CompletionTime']).dt.strftime('%I:%M:%S %p')
+
+        filtered_df = df
+        # (continues as before)
     except Exception as e:
-        error_message = html.Div([
-            html.H4("Database Connection Error", className='text-center text-danger'),
-            html.P(f"Could not connect to database: {str(e)}", className='text-center')
-        ])
-        empty_fig = px.bar()
-        return error_message, None, error_message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
-
-    # Defensive: handle None returns to avoid NoneType errors
-    if df is None or df_50_days is None or df_job_duration is None or df_unlock_online is None:
-        logger.warning(f"fetch_data returned None (env={environment}, date={selected_date}); returning empty visuals")
+        logger.error(f"Unhandled error in update_dashboard: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
         empty_fig = px.bar()
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
-
-    if df.empty:
-        logger.info(f"No data returned for env={environment}, date={selected_date}")
-        message = html.Div(
-            [
-                html.H4("No Data Available", className='text-center text-danger')
-            ]
-        )
-        empty_fig = px.bar()
-        # Return empty failed jobs info as the second output
         return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
     # Calculate job duration and format times for display - FIXED DataFrame warnings
@@ -1694,6 +1701,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
             app.email_data = {
                 'image_path': image_path,
                 'processing_date': selected_date,
+                'environment': environment,
                 'benchmark_end_time_formatted': benchmark_end_time_formatted,
                 'failed_jobs': failed_jobs,
                 'solution_text': solution_text
@@ -1714,7 +1722,8 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
                 # Prepare Outlook email object
                 mail = send_email_with_screenshot(
                     data['image_path'], 
-                    data['processing_date'], 
+                    data['processing_date'],
+                    data.get('environment', 'PROD'), 
                     data['benchmark_end_time_formatted'], 
                     data['failed_jobs'],
                     data.get('solution_text', "")
@@ -1906,7 +1915,7 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
     finally:
         driver.quit()
 
-def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_formatted, failed_jobs=None, solution_text=None):
+def send_email_with_screenshot(image_path, processing_date, environment, benchmark_end_time_formatted, failed_jobs=None, solution_text=None):
     """
     Send an email with the dashboard screenshot and failed job details
     
@@ -1932,7 +1941,7 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
             mail.CC = ";".join(cc_list) if isinstance(cc_list, list) else str(cc_list)
     except Exception:
         mail.To = 'Pratik_Bhongade@Keybank.com;karen.a.tiemann-wozniak@key.com'
-    mail.Subject = f'AspireVision Dashboard - {processing_date}'
+    mail.Subject = f'AspireVision Dashboard - {processing_date} - {environment}'
     
     # Read the image
     try:
@@ -1944,7 +1953,10 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
         image_cid = 'dashboard_image'
     
     # Create highlights section with failed job information if available
-    highlights_html = f"<li>Aspire Online Availability at <strong>{benchmark_end_time_formatted}</strong></li>"
+    highlights_html = (
+        f"<li><strong>Environment:</strong> {environment}</li>"
+        f"<li>Aspire Online Availability at <strong>{benchmark_end_time_formatted}</strong></li>"
+    )
     
     # Add Reason for Unlock Online Delay in highlights if there are failed jobs
     if failed_jobs is not None and not failed_jobs.empty:
@@ -2015,12 +2027,16 @@ def update_email_preview(is_open):
         
         # Get all the fields needed to generate the email
         processing_date = data.get('processing_date', '')
+        environment = data.get('environment', 'PROD')
         benchmark_end_time_formatted = data.get('benchmark_end_time_formatted', '')
         failed_jobs = data.get('failed_jobs', pd.DataFrame())
         solution_text = data.get('solution_text', '')
         
         # Create highlights HTML
-        highlights_html = f"<li>Aspire Online Availability at <strong>{benchmark_end_time_formatted}</strong></li>"
+        highlights_html = (
+            f"<li><strong>Environment:</strong> {environment}</li>"
+            f"<li>Aspire Online Availability at <strong>{benchmark_end_time_formatted}</strong></li>"
+        )
         
         # Add Reason for Unlock Online Delay in highlights if there are failed jobs
         if failed_jobs is not None and not failed_jobs.empty:
@@ -2056,7 +2072,7 @@ def update_email_preview(is_open):
         </head>
         <body>
             <p>Hi All,</p>
-            <p>Please find the status of Aspire Nightly Batch - <strong>{processing_date}</strong></p>
+            <p>Please find the status of Aspire Nightly Batch - <strong>{processing_date}</strong> - <strong>{environment}</strong></p>
             <p><strong>Highlight:</strong></p>
             <ul>
                 {highlights_html}
