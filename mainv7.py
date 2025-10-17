@@ -16,6 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from io import BytesIO
 import io
+import json
 import time
 from time import perf_counter
 import win32com.client as win32
@@ -32,16 +33,6 @@ import socket
 import threading
 import traceback
 from pathlib import Path
-
-# Import configuration
-try:
-    from config import DATABASE_CONFIG, EMAIL_CONFIG, APP_CONFIG, PATHS_CONFIG
-    CONFIG_LOADED = True
-except ImportError as e:
-    print(f"Warning: Could not load config.py: {e}")
-    print("Using fallback configuration...")
-    CONFIG_LOADED = False
-    # Fallback configuration will be defined below
 
 # Chatbot functionality removed
 
@@ -121,6 +112,44 @@ def setup_logging():
 
 # Initialize logging
 logger, log_file_path = setup_logging()
+
+# ----------------------------------------------------------------------------
+# CONFIG LOADING
+# ----------------------------------------------------------------------------
+def load_config():
+    """Load configuration from JSON. Falls back to sane defaults if missing."""
+    try:
+        # Try next to script, and support PyInstaller bundles
+        config_candidates = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"),
+            resource_path("config.json"),
+            "config.json"
+        ]
+        for cfg in config_candidates:
+            if os.path.exists(cfg):
+                with open(cfg, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                logger.info(f"Loaded configuration from: {cfg}")
+                return cfg_data
+        logger.warning("config.json not found; using built-in defaults")
+    except Exception as e:
+        logger.error(f"Error loading config.json: {e}")
+
+    # Defaults if config.json missing or invalid
+    return {
+        "database_environments": {
+            "PROD": {"SERVER": r"SDC01ASRSQPD01S\PSQLINST01", "DATABASE": "ASPIRE", "DISPLAY_NAME": "Production"},
+            "IT": {"SERVER": r"SDC01ASRSQIT01S\PSQLINST01", "DATABASE": "ASPIRE", "DISPLAY_NAME": "IT Environment"},
+            "QV": {"SERVER": r"SDC01ASRSQQV01S\PSQLINST01", "DATABASE": "ASPIRE", "DISPLAY_NAME": "QV Environment"}
+        },
+        "email": {
+            "to": ["Pratik_Bhongade@Keybank.com", "karen.a.tiemann-wozniak@key.com"],
+            "cc": []
+        }
+    }
+
+# Load configuration once
+CONFIG = load_config()
 
 # ============================================================================
 # ENHANCED PYINSTALLER COMPATIBILITY FUNCTIONS
@@ -367,42 +396,8 @@ def get_last_business_day():
 default_date = get_last_business_day().strftime('%Y-%m-%d')
 logger.info(f"Default date set to: {default_date}")
 
-# Database configuration (loaded from config.py or fallback)
-if not CONFIG_LOADED:
-    # Fallback configuration if config.py is not available
-    DATABASE_CONFIG = {
-        'PROD': {
-            'SERVER': r'SDC01ASRSQPD01S\PSQLINST01',
-            'DATABASE': 'ASPIRE',
-            'DISPLAY_NAME': 'Production',
-            'DRIVER': '{SQL Server}',
-            'TRUSTED_CONNECTION': 'yes'
-        },
-        'IT': {
-            'SERVER': r'SDC01ASRSQIT01S\PSQLINST01',
-            'DATABASE': 'ASPIRE',
-            'DISPLAY_NAME': 'IT Environment',
-            'DRIVER': '{SQL Server}',
-            'TRUSTED_CONNECTION': 'yes'
-        },
-        'QV': {
-            'SERVER': r'SDC01ASRSQQV01S\PSQLINST01',
-            'DATABASE': 'ASPIRE',
-            'DISPLAY_NAME': 'QV Environment',
-            'DRIVER': '{SQL Server}',
-            'TRUSTED_CONNECTION': 'yes'
-        }
-    }
-    EMAIL_CONFIG = {
-        'TO_ADDRESSES': ['Pratik_Bhongade@Keybank.com', 'karen.a.tiemann-wozniak@key.com'],
-        'SENDER': {
-            'NAME': 'Pratik Bhongade',
-            'TITLE': 'Software Engineer',
-            'DEPARTMENT': 'KTO CBTO Equipment Finance',
-            'LOCATION': 'Pune, India',
-            'EMAIL': 'Pratik_Bhongade@key.com'
-        }
-    }
+# Database configuration for different environments (loaded from CONFIG)
+DATABASE_CONFIG = CONFIG.get('database_environments', {})
 
 # Function to fetch data
 def fetch_data(selected_date, environment='PROD'):
@@ -412,10 +407,10 @@ def fetch_data(selected_date, environment='PROD'):
         db_config = DATABASE_CONFIG.get(environment, DATABASE_CONFIG['PROD'])
         
         conn_str = (
-            f"DRIVER={db_config.get('DRIVER', '{SQL Server}')};"
+            r'DRIVER={SQL Server};'
             f"SERVER={db_config['SERVER']};"
             f"DATABASE={db_config['DATABASE']};"
-            f"Trusted_Connection={db_config.get('TRUSTED_CONNECTION', 'yes')};"
+            r'Trusted_Connection=yes;'
         )
         logger.debug(f"Attempting database connection to {db_config['DISPLAY_NAME']}...")
         conn = pyodbc.connect(conn_str)
@@ -1194,13 +1189,12 @@ def update_dashboard(selected_date, environment):
 
     # Create Anomaly Detection graph (only for the Anomaly Detection tab)
     if not df_50_days.empty:
-        try:
-            logger.debug("Creating enhanced anomaly detection with expected completion times")
+        logger.debug("Creating enhanced anomaly detection with expected completion times")
             
-            # Filter out "12. Aging Calculations" job from the anomaly detection data
-            df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
+        # Filter out "12. Aging Calculations" job from the anomaly detection data
+        df_50_days_filtered = df_50_days[df_50_days['JobName'] != '12. Aging Calculations']
             
-            if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
+        if not df_50_days_filtered.empty and df_50_days_filtered['DurationMinutes'].std() > 0:
                 # Calculate expected completion times (mean duration per job)
                 job_expected_durations = df_50_days_filtered.groupby('JobName')['DurationMinutes'].agg([
                     ('ExpectedDuration', 'mean'),
@@ -1356,21 +1350,7 @@ def update_dashboard(selected_date, environment):
                         template="plotly_white"
                     )
                     
-        except Exception as e:
-            logger.error(f"Error in anomaly detection: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            fig_anomaly_detection = go.Figure()
-            fig_anomaly_detection.add_annotation(
-                text=f"Error in anomaly detection: {str(e)}",
-                xref="paper", yref="paper",
-                x=0.5, y=0.5, xanchor='center', yanchor='middle',
-                showarrow=False,
-                font=dict(size=14, color="red")
-            )
-            fig_anomaly_detection.update_layout(
-                title="Anomaly Detection - Error",
-                template="plotly_white"
-            )
+        
     else:
         fig_anomaly_detection = go.Figure()
         fig_anomaly_detection.add_annotation(
@@ -1467,7 +1447,7 @@ def update_dashboard(selected_date, environment):
                                 size=12,
                                 color=severity_colors[severity],
                                 symbol='circle',
-                                                                line=dict(width=2, color='white')
+                                line=dict(width=2, color='white')
                             ),
                             hovertemplate=(
                                 '<b>Job:</b> %{customdata[0]}<br>'
@@ -1511,23 +1491,23 @@ def update_dashboard(selected_date, environment):
                     },
                     xaxis_title='Job End Time',
                     yaxis_title='Recovery Time (minutes)',
-                template="plotly_white",
+                    template="plotly_white",
                     hovermode='closest',
-                xaxis=dict(
+                    xaxis=dict(
                         type='date',
                         tickformat='%m/%d %H:%M',
-                    showgrid=True,
+                        showgrid=True,
                         gridcolor='lightgray',
                         tickangle=-45,
                         title_standoff=25
-                ),
-                yaxis=dict(
-                    showgrid=True,
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
                         gridcolor='lightgray',
                         rangemode='tozero',
                         title_standoff=15
-                ),
-                legend=dict(
+                    ),
+                    legend=dict(
                         orientation='v',
                         yanchor='top',
                         y=1,
@@ -1538,8 +1518,8 @@ def update_dashboard(selected_date, environment):
                         borderwidth=1
                     ),
                     margin=dict(l=60, r=120, t=80, b=100),
-                hoverlabel=dict(
-                    bgcolor="white",
+                    hoverlabel=dict(
+                        bgcolor="white",
                         font_size=11,
                         font_family="Arial",
                         bordercolor='gray'
@@ -1657,7 +1637,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
             solution_text = app.solution_text if hasattr(app, 'solution_text') else ""
             
             # Capture screenshot of just the main dashboard tab
-            image_path = capture_main_dashboard(selected_date)
+            image_path = capture_main_dashboard(selected_date, environment)
             
             # Get the benchmark end time
             benchmark_end_time = df[df['JobName'] == '20. Benchmark Update']['EndTime'].max()
@@ -1759,7 +1739,7 @@ def run_dash_server_directly():
         return False
 
 # Function to capture main dashboard screenshot using Selenium
-def capture_main_dashboard(selected_date, output_path=None):
+def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
     """
     Minimalist approach to capture the dashboard without the empty space
     
@@ -1810,6 +1790,35 @@ def capture_main_dashboard(selected_date, output_path=None):
             EC.element_to_be_clickable((By.ID, "tab-main-dashboard"))
         ).click()
         
+        # Set the environment in dropdown via Dash React props
+        # Ensure JS context present (no-op safeguard)
+        try:
+            driver.execute_script("return true;")
+        except Exception:
+            pass
+
+        # Try to set dropdown value programmatically
+        try:
+            driver.execute_script(
+                "var drp = document.querySelector('#environment-selector'); if(drp){ drp.__dashprivate_value = arguments[0]; }",
+                environment
+            )
+        except Exception:
+            # Fallback: click dropdown and choose option by text
+            try:
+                dropdown = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "environment-selector"))
+                )
+                dropdown.click()
+                time.sleep(0.5)
+                # Try selecting via menu options by visible text value attribute
+                opt = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, f"//*[contains(@id,'environment-selector')]//*[self::option or self::div][contains(., '{environment}')]"))
+                )
+                opt.click()
+            except Exception:
+                pass
+
         # Set the date
         driver.execute_script(f"document.getElementById('date-picker-table').value = '{selected_date}'")
         driver.execute_script("document.getElementById('date-picker-table').dispatchEvent(new Event('change'))")
@@ -1817,28 +1826,36 @@ def capture_main_dashboard(selected_date, output_path=None):
         # Wait for data to load
         time.sleep(10)
         
-        # Remove send email button
+        # MINIMALIST SOLUTION:
+        # 1. Keep only the content we want
         driver.execute_script("""
+            // Remove the send email button row
             var sendBtn = document.getElementById('send-email-row');
             if (sendBtn) sendBtn.remove();
+            
+            // Simple but effective: hide all elements after the tabs
+            var tabs = document.querySelector('.tabs');
+            var nextSibling = tabs.nextElementSibling;
+            while (nextSibling) {
+                var temp = nextSibling.nextElementSibling;
+                if (nextSibling.id !== 'send-email-row') {
+                    nextSibling.style.display = 'none';
+                }
+                nextSibling = temp;
+            }
+            
+            // Hide all other tabs
+            document.querySelectorAll('.tab-pane').forEach(function(tab) {
+                if (tab.id !== 'tab-main-dashboard') {
+                    tab.style.display = 'none';
+                }
+            });
         """)
         
         # Wait for changes to apply
         time.sleep(1)
         
-        # Get the full page height of the main dashboard tab content
-        total_height = driver.execute_script("""
-            var mainDashboard = document.getElementById('tab-main-dashboard');
-            return mainDashboard ? mainDashboard.scrollHeight : document.body.scrollHeight;
-        """)
-        
-        # Set viewport to full height to capture everything
-        driver.set_window_size(1920, total_height + 200)  # Add 200px padding
-        
-        # Wait for resize
-        time.sleep(1)
-        
-        # Take the full screenshot
+        # Take the screenshot
         driver.save_screenshot(output_path)
         
         print(f"Dashboard screenshot saved to {output_path}")
@@ -1870,9 +1887,19 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
     # Create Outlook email
     outlook = win32.Dispatch('outlook.application')
     mail = outlook.CreateItem(0)
-    # Use email addresses from config
-    mail.To = ';'.join(EMAIL_CONFIG['TO_ADDRESSES'])
-    mail.Subject = EMAIL_CONFIG.get('SUBJECT_TEMPLATE', 'AspireVision Dashboard - {date}').format(date=processing_date)
+    # Use recipients from CONFIG
+    try:
+        recipients = CONFIG.get('email', {}).get('to', [])
+        cc_list = CONFIG.get('email', {}).get('cc', [])
+        if isinstance(recipients, list):
+            mail.To = ";".join(recipients)
+        else:
+            mail.To = str(recipients)
+        if cc_list:
+            mail.CC = ";".join(cc_list) if isinstance(cc_list, list) else str(cc_list)
+    except Exception:
+        mail.To = 'Pratik_Bhongade@Keybank.com;karen.a.tiemann-wozniak@key.com'
+    mail.Subject = f'AspireVision Dashboard - {processing_date}'
     
     # Read the image
     try:
@@ -1924,10 +1951,10 @@ def send_email_with_screenshot(image_path, processing_date, benchmark_end_time_f
     <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 10px; margin-top: 10px;">
         <tr>
             <td style="vertical-align: top;">
-                <strong style="color: #086C49;">{EMAIL_CONFIG['SENDER']['NAME']}</strong><br>
-                <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['TITLE']}</span><br>
-                <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['DEPARTMENT']} | {EMAIL_CONFIG['SENDER']['LOCATION']}</span><br>
-                <a href="mailto:{EMAIL_CONFIG['SENDER']['EMAIL']}" style="color: #086C49; text-decoration: none;">{EMAIL_CONFIG['SENDER']['EMAIL']}</a><br>
+                <strong style="color: #086C49;">Pratik Bhongade</strong><br>
+                <span style="color: #666666;">Software Engineer</span><br>
+                <span style="color: #666666;">KTO CBTO Equipment Finance | Pune, India</span><br>
+                <a href="mailto:Pratik_Bhongade@key.com" style="color: #086C49; text-decoration: none;">Pratik_Bhongade@key.com</a><br>
             </td>
         </tr>
     </table>
@@ -2010,10 +2037,10 @@ def update_email_preview(is_open):
             <table cellpadding="0" cellspacing="0" border="0" style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 10px; margin-top: 10px;">
                 <tr>
                     <td style="vertical-align: top;">
-                        <strong style="color: #086C49;">{EMAIL_CONFIG['SENDER']['NAME']}</strong><br>
-                        <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['TITLE']}</span><br>
-                        <span style="color: #666666;">{EMAIL_CONFIG['SENDER']['DEPARTMENT']} | {EMAIL_CONFIG['SENDER']['LOCATION']}</span><br>
-                        <a href="mailto:{EMAIL_CONFIG['SENDER']['EMAIL']}" style="color: #086C49; text-decoration: none;">{EMAIL_CONFIG['SENDER']['EMAIL']}</a><br>
+                        <strong style="color: #086C49;">Pratik Bhongade</strong><br>
+                        <span style="color: #666666;">Software Engineer</span><br>
+                        <span style="color: #666666;">KTO CBTO Equipment Finance | Pune, India</span><br>
+                        <a href="mailto:Pratik_Bhongade@key.com" style="color: #086C49; text-decoration: none;">Pratik_Bhongade@key.com</a><br>
                     
                     </td>
                 </tr>
