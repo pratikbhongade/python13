@@ -148,9 +148,6 @@ def load_config():
         }
     }
 
-# Load configuration once
-CONFIG = load_config()
-
 # ============================================================================
 # ENHANCED PYINSTALLER COMPATIBILITY FUNCTIONS
 # ============================================================================
@@ -179,6 +176,9 @@ def resource_path(relative_path):
         fallback_path = os.path.join(os.path.abspath("."), relative_path)
         logger.warning(f"Using fallback path: {fallback_path}")
         return fallback_path
+
+# Load configuration once (after resource_path is defined)
+CONFIG = load_config()
 
 def get_edge_driver_path():
     """Get the path to Edge WebDriver for both dev and PyInstaller with enhanced error handling"""
