@@ -3,17 +3,23 @@
     "PROD": {
       "SERVER": "SDC01ASRSQPD01S\\PSQLINST01",
       "DATABASE": "ASPIRE",
-      "DISPLAY_NAME": "Production"
+      "DISPLAY_NAME": "Production",
+      "DRIVER": "{SQL Server}",
+      "TRUSTED_CONNECTION": "yes"
     },
     "IT": {
       "SERVER": "SDC01ASRSQIT01S\\PSQLINST01",
       "DATABASE": "ASPIRE",
-      "DISPLAY_NAME": "IT Environment"
+      "DISPLAY_NAME": "IT Environment",
+      "DRIVER": "{SQL Server}",
+      "TRUSTED_CONNECTION": "yes"
     },
     "QV": {
       "SERVER": "SDC01ASRSQQV01S\\PSQLINST01",
       "DATABASE": "ASPIRE",
-      "DISPLAY_NAME": "QV Environment"
+      "DISPLAY_NAME": "QV Environment",
+      "DRIVER": "{SQL Server}",
+      "TRUSTED_CONNECTION": "yes"
     }
   },
   "email": {
