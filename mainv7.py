@@ -18,6 +18,7 @@ from io import BytesIO
 import io
 import json
 import time
+import urllib.parse
 from time import perf_counter
 import win32com.client as win32
 # Removed multiprocessing to avoid PyInstaller issues
@@ -1795,20 +1796,49 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
         raise
     
     try:
-        # Open the dashboard
-        driver.get("http://127.0.0.1:8050/")
+        # Open the dashboard with env and date as query params to hint the app
+        query = urllib.parse.urlencode({
+            'env': environment,
+            'date': selected_date
+        })
+        driver.get(f"http://127.0.0.1:8050/?{query}")
         
         # Wait for the page to load completely
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "date-picker-table"))
         )
         
+        # Before interacting, force Dash persistence to target environment and reload
+        try:
+            driver.execute_script(
+                """
+                (function(env){
+                  try {
+                    var key = '_dash_persistence';
+                    var current = window.sessionStorage.getItem(key);
+                    var obj = {};
+                    if (current) { try { obj = JSON.parse(current) } catch(e) { obj = {}; } }
+                    if (!obj['environment-selector']) { obj['environment-selector'] = {}; }
+                    obj['environment-selector']['value'] = env;
+                    window.sessionStorage.setItem(key, JSON.stringify(obj));
+                  } catch(e) {}
+                })(arguments[0]);
+                """,
+                environment
+            )
+            driver.refresh()
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.ID, "date-picker-table"))
+            )
+        except Exception:
+            pass
+
         # Click on main dashboard tab
         WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.ID, "tab-main-dashboard"))
         ).click()
         
-        # Select environment by interacting with the dcc.Dropdown menu
+        # Select environment by interacting with the dcc.Dropdown menu (ensure UI reflects desired env)
         try:
             label_map = {
                 'PROD': 'Production',
@@ -1843,8 +1873,8 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
         driver.execute_script(f"document.getElementById('date-picker-table').value = '{selected_date}'")
         driver.execute_script("document.getElementById('date-picker-table').dispatchEvent(new Event('change'))")
         
-        # Wait for data to load
-        time.sleep(10)
+        # Wait for data to load after changing env/date
+        time.sleep(12)
         
         # MINIMALIST SOLUTION:
         # 1. Keep only the content we want
