@@ -18,6 +18,7 @@ from io import BytesIO
 import io
 import json
 import time
+import urllib.parse
 from time import perf_counter
 import win32com.client as win32
 # Removed multiprocessing to avoid PyInstaller issues
@@ -669,6 +670,7 @@ email_preview_modal = dbc.Modal([
 
 # Layout of the dashboard
 app.layout = dbc.Container([
+    dcc.Location(id='url', refresh=False),
     dbc.Row([
         dbc.Col(html.Img(src='data:image/png;base64,{}'.format(logo_base64), height='60px'), width='auto'),
         dbc.Col(html.H1("AspireVision Dashboard", className='text-center mb-4', style={'font-weight': 'bold', 'color': '#2A3F5F', 'border-bottom': '1px solid #2A3F5F'}), width=True, className='d-flex justify-content-center align-items-center'),
@@ -872,9 +874,23 @@ app.layout = dbc.Container([
      Output('anomaly-detection-graph', 'figure'),
      Output('time-to-recovery-graph', 'figure')],
     [Input('date-picker-table', 'date'),
-     Input('environment-selector', 'value')]
+     Input('environment-selector', 'value'),
+     Input('url', 'href')]
 )
-def update_dashboard(selected_date, environment):
+def update_dashboard(selected_date, environment, href):
+    # Sync env/date from URL query params if present
+    try:
+        if href:
+            parsed = urllib.parse.urlparse(href)
+            q = urllib.parse.parse_qs(parsed.query)
+            env_q = q.get('env', [None])[0]
+            date_q = q.get('date', [None])[0]
+            if env_q in DATABASE_CONFIG:
+                environment = env_q
+            if date_q:
+                selected_date = date_q
+    except Exception:
+        pass
     now = datetime.now()
     selected_date_obj = datetime.strptime(selected_date, '%Y-%m-%d')
     
@@ -1795,36 +1811,21 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
         raise
     
     try:
-        # Open the dashboard
-        driver.get("http://127.0.0.1:8050/")
+        # Open the dashboard with env and date via query params to drive state
+        query = urllib.parse.urlencode({
+            'env': environment,
+            'date': selected_date
+        })
+        driver.get(f"http://127.0.0.1:8050/?{query}")
         
         # Wait for the page to load completely
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "date-picker-table"))
         )
         
-        # Before interacting, force Dash persistence to target environment and reload
+        # Clear any prior Dash persistence to avoid PROD default overriding query
         try:
-            driver.execute_script(
-                """
-                (function(env){
-                  try {
-                    var key = '_dash_persistence';
-                    var current = window.sessionStorage.getItem(key);
-                    var obj = {};
-                    if (current) { try { obj = JSON.parse(current) } catch(e) { obj = {}; } }
-                    if (!obj['environment-selector']) { obj['environment-selector'] = {}; }
-                    obj['environment-selector']['value'] = env;
-                    window.sessionStorage.setItem(key, JSON.stringify(obj));
-                  } catch(e) {}
-                })(arguments[0]);
-                """,
-                environment
-            )
-            driver.refresh()
-            WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.ID, "date-picker-table"))
-            )
+            driver.execute_script("try{ window.sessionStorage.removeItem('_dash_persistence'); }catch(e){}");
         except Exception:
             pass
 
@@ -1833,38 +1834,17 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
             EC.element_to_be_clickable((By.ID, "tab-main-dashboard"))
         ).click()
         
-        # Select environment by interacting with the dcc.Dropdown menu (ensure UI reflects desired env)
+        # No need to click env dropdown if URL sync is used; ensure it displays selected env
         try:
-            label_map = {
-                'PROD': 'Production',
-                'IT': 'IT Environment',
-                'QV': 'QV Environment'
-            }
+            label_map = {'PROD': 'Production', 'IT': 'IT Environment', 'QV': 'QV Environment'}
             target_label = label_map.get(environment, 'Production')
-
-            # Open the dropdown menu (click the control inside the component)
-            control = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//div[@id='environment-selector']//div[contains(@class,'Select-control')]"))
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", control)
-            control.click()
-            time.sleep(0.3)
-
-            # Click the option containing the target label
-            option = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, f"//div[contains(@class,'Select-menu-outer')]//div[contains(@class,'Select-option')][contains(., '{target_label}')]"))
-            )
-            option.click()
-
-            # Wait until the selected value label reflects the target label
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, f"//div[@id='environment-selector']//div[contains(@class,'Select-value-label')][contains(., '{target_label}')]"))
             )
         except Exception:
-            # As a last resort, proceed; the default may remain
             pass
 
-        # Set the date
+        # Set the date in case URL sync didn't take
         driver.execute_script(f"document.getElementById('date-picker-table').value = '{selected_date}'")
         driver.execute_script("document.getElementById('date-picker-table').dispatchEvent(new Event('change'))")
         
