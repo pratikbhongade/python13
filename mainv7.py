@@ -2129,42 +2129,46 @@ def open_browser_with_fallbacks(url):
     
     logger.info(f"Attempting to open browser at: {url}")
     
-    # Method 1: Default webbrowser module
+    # Preferred method on Windows: os.startfile (doesn't spawn a cmd window)
     try:
-        logger.debug("Trying webbrowser.open()...")
-        webbrowser.open(url)
-        logger.info("Browser opened using webbrowser module")
-        browser_opened = True
-        methods_tried.append("webbrowser.open() - Success")
+        if os.name == 'nt':
+            logger.debug("Trying os.startfile() on Windows...")
+            os.startfile(url)
+            logger.info("Browser opened using os.startfile()")
+            browser_opened = True
+            methods_tried.append("os.startfile() - Success")
     except Exception as e:
-        logger.warning(f"webbrowser.open() failed: {e}")
-        methods_tried.append(f"webbrowser.open() - Failed: {e}")
-    
-    # Method 2: Windows start command
+        logger.debug(f"os.startfile() failed: {e}")
+        methods_tried.append(f"os.startfile() - Failed: {e}")
+
+    # Next try webbrowser module (cross-platform)
     if not browser_opened:
         try:
-            logger.debug("Trying Windows start command...")
-            subprocess.Popen(['start', url], shell=True)
-            logger.info("Browser opened using Windows start command")
+            logger.debug("Trying webbrowser.open()...")
+            webbrowser.open(url, new=1, autoraise=True)
+            logger.info("Browser opened using webbrowser module")
             browser_opened = True
-            methods_tried.append("Windows start - Success")
+            methods_tried.append("webbrowser.open() - Success")
         except Exception as e:
-            logger.warning(f"Windows start command failed: {e}")
-            methods_tried.append(f"Windows start - Failed: {e}")
-    
-    # Method 3: Explorer method
+            logger.warning(f"webbrowser.open() failed: {e}")
+            methods_tried.append(f"webbrowser.open() - Failed: {e}")
+
+    # For remaining fallbacks use subprocess but hide any console window on Windows
     if not browser_opened:
+        CREATE_NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+
+        # Try explorer (shouldn't create a console)
         try:
             logger.debug("Trying explorer method...")
-            subprocess.Popen(['explorer', url])
+            subprocess.Popen(['explorer', url], creationflags=CREATE_NO_WINDOW)
             logger.info("Browser opened using explorer")
             browser_opened = True
             methods_tried.append("Explorer - Success")
         except Exception as e:
             logger.warning(f"Explorer method failed: {e}")
             methods_tried.append(f"Explorer - Failed: {e}")
-    
-    # Method 4: Direct browser executable calls
+
+    # Try direct browser executables (hidden)
     if not browser_opened:
         browser_paths = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -2174,12 +2178,11 @@ def open_browser_with_fallbacks(url):
             r"C:\Program Files\Mozilla Firefox\firefox.exe",
             r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe"
         ]
-        
         for browser_path in browser_paths:
             if os.path.exists(browser_path):
                 try:
                     logger.debug(f"Trying direct browser: {browser_path}")
-                    subprocess.Popen([browser_path, url])
+                    subprocess.Popen([browser_path, url], creationflags=CREATE_NO_WINDOW)
                     browser_name = os.path.basename(browser_path)
                     logger.info(f"Browser opened using direct path: {browser_name}")
                     browser_opened = True
@@ -2188,13 +2191,14 @@ def open_browser_with_fallbacks(url):
                 except Exception as e:
                     logger.debug(f"Direct browser {browser_path} failed: {e}")
                     methods_tried.append(f"Direct {os.path.basename(browser_path)} - Failed: {e}")
-    
-    # Method 5: PowerShell method (Windows-specific)
-    if not browser_opened:
+
+    # PowerShell fallback (use hidden window style)
+    if not browser_opened and os.name == 'nt':
         try:
-            logger.debug("Trying PowerShell start method...")
-            subprocess.Popen(['powershell', 'Start-Process', url])
-            logger.info("Browser opened using PowerShell")
+            logger.debug("Trying PowerShell hidden Start-Process method...")
+            ps_cmd = ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', f'Start-Process "{url}"']
+            subprocess.Popen(ps_cmd, creationflags=CREATE_NO_WINDOW)
+            logger.info("Browser opened using PowerShell Start-Process")
             browser_opened = True
             methods_tried.append("PowerShell - Success")
         except Exception as e:
@@ -2374,11 +2378,7 @@ def main():
     logger.info(f"Opening dashboard at: {dashboard_url}")
     print(f"\nOpening dashboard at: {dashboard_url}")
     
-    # Also request opening via default webbrowser as an extra convenience
-    try:
-        webbrowser.open(dashboard_url)
-    except Exception:
-        pass
+    # Use our safer browser opener which avoids spawning a visible cmd window
     browser_opened = open_browser_with_fallbacks(dashboard_url)
     
     print("\n" + "="*60)
