@@ -424,24 +424,26 @@ def fetch_data(selected_date, environment='PROD'):
         conn = pyodbc.connect(conn_str)
         logger.info(f"Database connection successful to {db_config['DISPLAY_NAME']}")
 
-        query = f"""
-        SELECT 
-            CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23) as ProcessingDate,
-            JSJ.JobStreamJoboid as Joboid, 
-            JSJ.Name as JobName,
-            CONVERT(datetime, JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time') AS [StartTime], 
-            CONVERT(datetime, JSH.EndTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time') AS [EndTime], 
-            JSH.Status, 
-            JSH.Message 
-        FROM JobStreamTaskHistory JSH
-        LEFT JOIN JobStreamTask JST ON JSH.JobStreamTaskOid = JST.JobStreamTaskoid 
-        JOIN JobStreamJob JSJ ON JSJ.JobStreamJoboid = JST.JobStreamJoboid
-        WHERE CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23) = '{selected_date}'
-        ORDER BY [StartTime] ASC
-        """
-        logger.info(f"Main query filter date: {selected_date}")
+        query = (
+            """
+            SELECT 
+                CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23) as ProcessingDate,
+                JSJ.JobStreamJoboid as Joboid, 
+                JSJ.Name as JobName,
+                CONVERT(datetime, JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time') AS [StartTime], 
+                CONVERT(datetime, JSH.EndTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time') AS [EndTime], 
+                JSH.Status, 
+                JSH.Message 
+            FROM JobStreamTaskHistory JSH
+            LEFT JOIN JobStreamTask JST ON JSH.JobStreamTaskOid = JST.JobStreamTaskoid 
+            JOIN JobStreamJob JSJ ON JSJ.JobStreamJoboid = JST.JobStreamJoboid
+            WHERE CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23) = ?
+            ORDER BY [StartTime] ASC
+            """
+        )
+        logger.info(f"Main query filter date (param): {selected_date}")
         logger.debug("Executing main data query")
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=[selected_date])
         logger.debug(f"Main query returned {len(df)} rows")
 
         query_50_days = """
@@ -475,14 +477,16 @@ def fetch_data(selected_date, environment='PROD'):
         df_job_duration = pd.read_sql(query_job_duration, conn)
         logger.debug(f"Job duration query returned {len(df_job_duration)} rows")
 
-        query_unlock_online = f"""
-        SELECT JobName, CONVERT(datetime, EndTime) AS CompletionTime, Status 
-        FROM Job_StatsVW 
-        WHERE JobName = 'UnLock Online' 
-        AND ProcessingDate = '{selected_date}'
-        """
+        query_unlock_online = (
+            """
+            SELECT JobName, CONVERT(datetime, EndTime) AS CompletionTime, Status 
+            FROM Job_StatsVW 
+            WHERE JobName = 'UnLock Online' 
+            AND ProcessingDate = ?
+            """
+        )
         logger.debug("Executing unlock online query")
-        df_unlock_online = pd.read_sql(query_unlock_online, conn)
+        df_unlock_online = pd.read_sql(query_unlock_online, conn, params=[selected_date])
         logger.debug(f"Unlock online query returned {len(df_unlock_online)} rows")
 
         conn.close()
