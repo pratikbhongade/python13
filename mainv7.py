@@ -439,7 +439,7 @@ def fetch_data(selected_date, environment='PROD'):
         WHERE CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23) = '{selected_date}'
         ORDER BY [StartTime] ASC
         """
-        logger.debug(f"Main query filter date: {selected_date}")
+        logger.info(f"Main query filter date: {selected_date}")
         logger.debug("Executing main data query")
         df = pd.read_sql(query, conn)
         logger.debug(f"Main query returned {len(df)} rows")
@@ -930,6 +930,16 @@ def update_dashboard(selected_date, environment, href):
             empty_fig = px.bar()
             return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
+        # Enforce selected_date filter in-app as a safety net
+        try:
+            pre_rows = len(df)
+            if 'ProcessingDate' in df.columns:
+                df = df[df['ProcessingDate'] == selected_date].copy()
+            post_rows = len(df)
+            logger.info(f"Applied in-app date filter rows: {pre_rows} -> {post_rows} for {selected_date}")
+        except Exception as e:
+            logger.debug(f"In-app date filter skipped: {e}")
+
         if df.empty:
             logger.info(f"No data returned for env={environment}, date={selected_date}")
             message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
@@ -951,7 +961,11 @@ def update_dashboard(selected_date, environment, href):
             df_unlock_online.loc[:, 'CompletionTime'] = pd.to_datetime(df_unlock_online['CompletionTime']).dt.strftime('%I:%M:%S %p')
 
         filtered_df = df
-        # (continues as before)
+        try:
+            sample_dates = pd.to_datetime(filtered_df['StartTime']).dt.strftime('%Y-%m-%d').unique().tolist()[:5]
+            logger.info(f"Final job table sample StartTime dates: {sample_dates}")
+        except Exception:
+            pass
     except Exception as e:
         logger.error(f"Unhandled error in update_dashboard: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
