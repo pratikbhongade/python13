@@ -952,14 +952,14 @@ def update_dashboard(selected_date, environment, href):
         
         # ... rest of function unchanged ...
         
-        # Calculate job duration and format times for display - FIXED DataFrame warnings
+        # Calculate job duration and format times for display - keep original datetime columns intact
         df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
         df.loc[:, 'Duration'] = df['Duration'].round(2).astype(str) + ' mins'
         
         df.loc[:, 'StartDate'] = pd.to_datetime(df['StartTime']).dt.strftime('%Y-%m-%d')
-        df.loc[:, 'StartTime'] = pd.to_datetime(df['StartTime']).dt.strftime('%I:%M:%S %p')
+        df.loc[:, 'StartTimeDisplay'] = pd.to_datetime(df['StartTime']).dt.strftime('%I:%M:%S %p')
         df.loc[:, 'EndDate'] = pd.to_datetime(df['EndTime']).dt.strftime('%Y-%m-%d')
-        df.loc[:, 'EndTime'] = pd.to_datetime(df['EndTime']).dt.strftime('%I:%M:%S %p')
+        df.loc[:, 'EndTimeDisplay'] = pd.to_datetime(df['EndTime']).dt.strftime('%I:%M:%S %p')
 
         if not df_unlock_online.empty:
             df_unlock_online.loc[:, 'CompletionTime'] = pd.to_datetime(df_unlock_online['CompletionTime']).dt.strftime('%I:%M:%S %p')
@@ -977,14 +977,14 @@ def update_dashboard(selected_date, environment, href):
         empty_fig = px.bar()
         return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
-    # Calculate job duration and format times for display - FIXED DataFrame warnings
+    # Calculate job duration and format times for display - keep original datetime columns intact
     df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
     df.loc[:, 'Duration'] = df['Duration'].round(2).astype(str) + ' mins'
     
     df.loc[:, 'StartDate'] = pd.to_datetime(df['StartTime']).dt.strftime('%Y-%m-%d')
-    df.loc[:, 'StartTime'] = pd.to_datetime(df['StartTime']).dt.strftime('%I:%M:%S %p')
+    df.loc[:, 'StartTimeDisplay'] = pd.to_datetime(df['StartTime']).dt.strftime('%I:%M:%S %p')
     df.loc[:, 'EndDate'] = pd.to_datetime(df['EndTime']).dt.strftime('%Y-%m-%d')
-    df.loc[:, 'EndTime'] = pd.to_datetime(df['EndTime']).dt.strftime('%I:%M:%S %p')
+    df.loc[:, 'EndTimeDisplay'] = pd.to_datetime(df['EndTime']).dt.strftime('%I:%M:%S %p')
 
     if not df_unlock_online.empty:
         df_unlock_online.loc[:, 'CompletionTime'] = pd.to_datetime(df_unlock_online['CompletionTime']).dt.strftime('%I:%M:%S %p')
@@ -993,7 +993,7 @@ def update_dashboard(selected_date, environment, href):
 
     # Updated table headers to include Duration column
     job_table_header = [html.Thead(html.Tr([html.Th(col) for col in ['JobName', 'StartDate', 'StartTime', 'EndDate', 'EndTime', 'Duration', 'Status']], className='bg-primary text-white'))]
-    job_table_body = [html.Tbody([html.Tr([html.Td(filtered_df.iloc[i][col]) for col in ['JobName', 'StartDate', 'StartTime', 'EndDate', 'EndTime', 'Duration', 'Status']]) for i in range(len(filtered_df))])]
+    job_table_body = [html.Tbody([html.Tr([html.Td(filtered_df.iloc[i][col]) for col in ['JobName', 'StartDate', 'StartTimeDisplay', 'EndDate', 'EndTimeDisplay', 'Duration', 'Status']]) for i in range(len(filtered_df))])]
 
     job_table = dbc.Table(job_table_header + job_table_body, striped=True, bordered=True, hover=True)
 
