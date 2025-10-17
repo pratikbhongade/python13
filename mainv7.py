@@ -406,8 +406,13 @@ def fetch_data(selected_date, environment='PROD'):
         # Get database configuration for the selected environment
         db_config = DATABASE_CONFIG.get(environment, DATABASE_CONFIG['PROD'])
         
+        # Log resolved config
         driver = db_config.get('DRIVER', '{SQL Server}')
         trusted = db_config.get('TRUSTED_CONNECTION', 'yes')
+        logger.info(
+            f"Resolved DB config -> SERVER={db_config.get('SERVER')}, DATABASE={db_config.get('DATABASE')}, "
+            f"DRIVER={driver}, TRUSTED_CONNECTION={trusted}"
+        )
         conn_str = (
             f"DRIVER={driver};"
             f"SERVER={db_config['SERVER']};"
@@ -907,6 +912,13 @@ def update_dashboard(selected_date, environment):
         ])
         empty_fig = px.bar()
         return error_message, None, error_message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+
+    # Defensive: handle None returns to avoid NoneType errors
+    if df is None or df_50_days is None or df_job_duration is None or df_unlock_online is None:
+        logger.warning("fetch_data returned None for one or more dataframes; returning empty visuals")
+        message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
+        empty_fig = px.bar()
+        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
 
     if df.empty:
         message = html.Div(
@@ -1619,6 +1631,9 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
         try:
             # Fetch current data for the selected date to get failed jobs
             df, _, _, _ = fetch_data(selected_date, environment)
+            if df is None:
+                logger.warning("Email preparation: fetch_data returned None; aborting email preview")
+                return n_clicks, False, False
             
             # Format date and time for display - FIXED DataFrame warnings
             df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
@@ -1639,6 +1654,7 @@ def handle_send_email(n_clicks, confirm_clicks, cancel_clicks, selected_date, en
             solution_text = app.solution_text if hasattr(app, 'solution_text') else ""
             
             # Capture screenshot of just the main dashboard tab
+            logger.info(f"Preparing email preview for date={selected_date}, env={environment}")
             image_path = capture_main_dashboard(selected_date, environment)
             
             # Get the benchmark end time
