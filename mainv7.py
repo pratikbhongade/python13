@@ -891,6 +891,13 @@ def update_dashboard(selected_date, environment, href):
                 selected_date = date_q
     except Exception:
         pass
+
+    # Defensive: selected_date may be None on initial render
+    if not selected_date:
+        logger.info("No selected_date provided; returning empty visuals")
+        message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
+        empty_fig = px.bar()
+        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
     now = datetime.now()
     selected_date_obj = datetime.strptime(selected_date, '%Y-%m-%d')
     
@@ -931,12 +938,13 @@ def update_dashboard(selected_date, environment, href):
 
     # Defensive: handle None returns to avoid NoneType errors
     if df is None or df_50_days is None or df_job_duration is None or df_unlock_online is None:
-        logger.warning("fetch_data returned None for one or more dataframes; returning empty visuals")
+        logger.warning(f"fetch_data returned None (env={environment}, date={selected_date}); returning empty visuals")
         message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
         empty_fig = px.bar()
         return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
 
     if df.empty:
+        logger.info(f"No data returned for env={environment}, date={selected_date}")
         message = html.Div(
             [
                 html.H4("No Data Available", className='text-center text-danger')
