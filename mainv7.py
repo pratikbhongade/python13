@@ -18,7 +18,6 @@ from io import BytesIO
 import io
 import json
 import time
-import urllib.parse
 from time import perf_counter
 import win32com.client as win32
 # Removed multiprocessing to avoid PyInstaller issues
@@ -1796,12 +1795,8 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
         raise
     
     try:
-        # Open the dashboard with env and date as query params to hint the app
-        query = urllib.parse.urlencode({
-            'env': environment,
-            'date': selected_date
-        })
-        driver.get(f"http://127.0.0.1:8050/?{query}")
+        # Open the dashboard
+        driver.get("http://127.0.0.1:8050/")
         
         # Wait for the page to load completely
         WebDriverWait(driver, 30).until(
