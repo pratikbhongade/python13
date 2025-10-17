@@ -897,7 +897,7 @@ def update_dashboard(selected_date, environment, href):
         logger.info("No selected_date provided; returning empty visuals")
         message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
         empty_fig = px.bar()
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
     now = datetime.now()
     selected_date_obj = datetime.strptime(selected_date, '%Y-%m-%d')
     
@@ -934,14 +934,14 @@ def update_dashboard(selected_date, environment, href):
             html.P(f"Could not connect to database: {str(e)}", className='text-center')
         ])
         empty_fig = px.bar()
-        return error_message, None, error_message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+        return error_message, None, error_message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
     # Defensive: handle None returns to avoid NoneType errors
     if df is None or df_50_days is None or df_job_duration is None or df_unlock_online is None:
         logger.warning(f"fetch_data returned None (env={environment}, date={selected_date}); returning empty visuals")
         message = html.Div([html.H4("No Data Available", className='text-center text-danger')])
         empty_fig = px.bar()
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
     if df.empty:
         logger.info(f"No data returned for env={environment}, date={selected_date}")
@@ -952,7 +952,7 @@ def update_dashboard(selected_date, environment, href):
         )
         empty_fig = px.bar()
         # Return empty failed jobs info as the second output
-        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig, empty_fig
+        return message, None, message, empty_fig, empty_fig, empty_fig, html.Div(), empty_fig, empty_fig, empty_fig
 
     # Calculate job duration and format times for display - FIXED DataFrame warnings
     df.loc[:, 'Duration'] = (pd.to_datetime(df['EndTime']) - pd.to_datetime(df['StartTime'])).dt.total_seconds() / 60
