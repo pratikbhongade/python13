@@ -1808,34 +1808,36 @@ def capture_main_dashboard(selected_date, environment='PROD', output_path=None):
             EC.element_to_be_clickable((By.ID, "tab-main-dashboard"))
         ).click()
         
-        # Set the environment in dropdown via Dash React props
-        # Ensure JS context present (no-op safeguard)
+        # Select environment by interacting with the dcc.Dropdown menu
         try:
-            driver.execute_script("return true;")
-        except Exception:
-            pass
+            label_map = {
+                'PROD': 'Production',
+                'IT': 'IT Environment',
+                'QV': 'QV Environment'
+            }
+            target_label = label_map.get(environment, 'Production')
 
-        # Try to set dropdown value programmatically
-        try:
-            driver.execute_script(
-                "var drp = document.querySelector('#environment-selector'); if(drp){ drp.__dashprivate_value = arguments[0]; }",
-                environment
+            # Open the dropdown menu (click the control inside the component)
+            control = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//div[@id='environment-selector']//div[contains(@class,'Select-control')]"))
+            )
+            driver.execute_script("arguments[0].scrollIntoView(true);", control)
+            control.click()
+            time.sleep(0.3)
+
+            # Click the option containing the target label
+            option = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, f"//div[contains(@class,'Select-menu-outer')]//div[contains(@class,'Select-option')][contains(., '{target_label}')]"))
+            )
+            option.click()
+
+            # Wait until the selected value label reflects the target label
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, f"//div[@id='environment-selector']//div[contains(@class,'Select-value-label')][contains(., '{target_label}')]"))
             )
         except Exception:
-            # Fallback: click dropdown and choose option by text
-            try:
-                dropdown = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.ID, "environment-selector"))
-                )
-                dropdown.click()
-                time.sleep(0.5)
-                # Try selecting via menu options by visible text value attribute
-                opt = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.XPATH, f"//*[contains(@id,'environment-selector')]//*[self::option or self::div][contains(., '{environment}')]"))
-                )
-                opt.click()
-            except Exception:
-                pass
+            # As a last resort, proceed; the default may remain
+            pass
 
         # Set the date
         driver.execute_script(f"document.getElementById('date-picker-table').value = '{selected_date}'")
