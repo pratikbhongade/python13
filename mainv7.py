@@ -190,7 +190,7 @@ def get_edge_driver_path():
             logger.info(f"PyInstaller Edge driver path: {driver_path}")
         else:
             # In development - updated for new project structure
-            driver_path = r"C:\Aspire Dashboard\build_files\edgedriver_win64\msedgedriver.exe"
+            driver_path = r"C:\Dashboard Test\EXETest\build_files\edgedriver_win64\msedgedriver.exe"
             logger.info(f"Development Edge driver path: {driver_path}")
         
         # Verify the driver exists
@@ -230,8 +230,8 @@ def get_logo_path():
         else:
             # In development - check multiple possible locations
             possible_paths = [
-                r'C:\Aspire Dashboard\assets\Aspire.png',
-                r'C:\Aspire Dashboard\build_files\assets\Aspire.png',
+                r'C:\Dashboard Test\EXETest\assets\Aspire.png',
+                r'C:\Dashboard Test\EXETest\build_files\assets\Aspire.png',
                 r'assets\Aspire.png',
                 r'Aspire.png'
             ]
@@ -246,7 +246,7 @@ def get_logo_path():
             
             if not logo_path:
                 # If no file found, return the expected path
-                logo_path = r'C:\Aspire Dashboard\assets\Aspire.png'
+                logo_path = r'C:\Dashboard Test\EXETest\assets\Aspire.png'
                 logger.warning(f"Using default logo path: {logo_path}")
         
         logger.info(f"Logo path: {logo_path} (exists: {os.path.exists(logo_path)})")
@@ -265,7 +265,7 @@ def get_template_path():
             logger.debug(f"PyInstaller template path: {template_path}")
         else:
             # In development - updated for new project structure
-            template_path = r'C:\Aspire Dashboard\templates\layout.html'
+            template_path = r'C:\Dashboard Test\EXETest\templates\layout.html'
             logger.debug(f"Development template path: {template_path}")
         
         logger.info(f"Template path: {template_path} (exists: {os.path.exists(template_path)})")
@@ -341,8 +341,8 @@ except FileNotFoundError as e:
         'build_files\\assets\\Aspire.png',
         resource_path('Aspire.png'),
         resource_path(os.path.join('assets', 'Aspire.png')),
-        r'C:\Aspire Dashboard\assets\Aspire.png',
-        r'C:\Aspire Dashboard\build_files\assets\Aspire.png'
+        r'C:\Dashboard Test\EXETest\assets\Aspire.png',
+        r'C:\Dashboard Test\EXETest\build_files\assets\Aspire.png'
     ]
     
     logo_found = False
@@ -879,9 +879,14 @@ app.layout = dbc.Container([
 )
 def update_dashboard(selected_date, environment, href):
     try:
-        # Sync env/date from URL query params if present
+        # Sync from URL only when URL triggers the callback (avoid overriding DatePicker changes)
         try:
-            if href:
+            ctx = dash.callback_context
+            if ctx and ctx.triggered:
+                trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            else:
+                trigger_id = None
+            if trigger_id == 'url' and href:
                 parsed = urllib.parse.urlparse(href)
                 q = urllib.parse.parse_qs(parsed.query)
                 env_q = q.get('env', [None])[0]
