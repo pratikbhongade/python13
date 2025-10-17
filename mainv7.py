@@ -427,8 +427,9 @@ def fetch_data(selected_date, environment='PROD'):
         query = f"""
         SELECT 
             CASE 
-                WHEN DATEPART(hour, JSH.StartTime) < 14 THEN CONVERT(varchar, DATEADD(day, -1, JSH.StartTime), 23) 
-                ELSE CONVERT(varchar, JSH.StartTime, 23) 
+                WHEN DATEPART(hour, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')) < 14 
+                    THEN CONVERT(varchar, DATEADD(day, -1, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time'))), 23)
+                ELSE CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23)
             END as ProcessingDate, 
             JSJ.JobStreamJoboid as Joboid, 
             JSJ.Name as JobName,
@@ -440,10 +441,13 @@ def fetch_data(selected_date, environment='PROD'):
         LEFT JOIN JobStreamTask JST ON JSH.JobStreamTaskOid = JST.JobStreamTaskoid 
         JOIN JobStreamJob JSJ ON JSJ.JobStreamJoboid = JST.JobStreamJoboid
         WHERE 
-            CASE 
-                WHEN DATEPART(hour, JSH.StartTime) < 14 THEN CONVERT(varchar, DATEADD(day, -1, JSH.StartTime), 23) 
-                ELSE CONVERT(varchar, JSH.StartTime, 23) 
-            END = '{selected_date}'
+            (
+                CASE 
+                    WHEN DATEPART(hour, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')) < 14 
+                        THEN CONVERT(varchar, DATEADD(day, -1, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time'))), 23)
+                    ELSE CONVERT(varchar, CONVERT(datetime, (JSH.StartTime AT TIME ZONE 'UTC' AT TIME ZONE 'Eastern Standard Time')), 23)
+                END
+            ) = '{selected_date}'
         ORDER BY StartTime ASC
         """
         logger.debug("Executing main data query")
@@ -717,8 +721,7 @@ app.layout = dbc.Container([
                     initial_visible_month=default_date,
                     clearable=False,
                     month_format='MMMM YYYY',
-                    persistence=True,
-                    persistence_type='session'
+                    persistence=False
                 ),
             ], style={'width': '100%', 'position': 'relative'}),
             html.I(className="fa fa-calendar", id="calendar-icon", style={"margin-left": "10px", "color": "#007bff"}),
