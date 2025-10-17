@@ -406,11 +406,13 @@ def fetch_data(selected_date, environment='PROD'):
         # Get database configuration for the selected environment
         db_config = DATABASE_CONFIG.get(environment, DATABASE_CONFIG['PROD'])
         
+        driver = db_config.get('DRIVER', '{SQL Server}')
+        trusted = db_config.get('TRUSTED_CONNECTION', 'yes')
         conn_str = (
-            r'DRIVER={SQL Server};'
+            f"DRIVER={driver};"
             f"SERVER={db_config['SERVER']};"
             f"DATABASE={db_config['DATABASE']};"
-            r'Trusted_Connection=yes;'
+            f"Trusted_Connection={trusted};"
         )
         logger.debug(f"Attempting database connection to {db_config['DISPLAY_NAME']}...")
         conn = pyodbc.connect(conn_str)
