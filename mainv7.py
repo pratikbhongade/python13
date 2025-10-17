@@ -1,3 +1,54 @@
+# ----------------------------------------------------------------------------
+# DAILY EMAIL SCHEDULER (2 AM local time)
+# ----------------------------------------------------------------------------
+def schedule_daily_email():
+    """Background thread to trigger email at 2:00 AM local time daily."""
+    def runner():
+        while True:
+            try:
+                now = datetime.now()
+                next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
+                if next_run <= now:
+                    next_run += timedelta(days=1)
+                sleep_seconds = (next_run - now).total_seconds()
+                logger.info(f"Scheduler sleeping {int(sleep_seconds)}s until next 2 AM run")
+                time.sleep(sleep_seconds)
+
+                # Derive processing date: last business day logic already used by default_date
+                processing_date = get_last_business_day().strftime('%Y-%m-%d')
+                environment = 'PROD'
+                logger.info(f"Scheduler triggering email for date={processing_date}, env={environment}")
+
+                # Prepare email data same as button flow
+                df_sched, _, _, _ = fetch_data(processing_date, environment)
+                if df_sched is None or df_sched.empty:
+                    logger.warning("Scheduler: No data to email; skipping")
+                    continue
+
+                image_path = capture_main_dashboard(processing_date, environment)
+                benchmark_end_time = df_sched[df_sched['JobName'] == '20. Benchmark Update']['EndTime'].max()
+                if pd.notnull(benchmark_end_time):
+                    bench_fmt = pd.to_datetime(benchmark_end_time).strftime('%I:%M %p')
+                else:
+                    bench_fmt = "N/A"
+
+                mail = send_email_with_screenshot(
+                    image_path,
+                    processing_date,
+                    environment,
+                    bench_fmt,
+                    df_sched[((df_sched['JobName'] != '20. Benchmark Update') & (df_sched['Status'] == 'Failed')) |
+                             ((df_sched['JobName'] == '20. Benchmark Update') & (df_sched['Status'] == 'Succeeded with Exceptions'))],
+                    getattr(app, 'solution_text', "")
+                )
+                mail.Send()
+                logger.info("Scheduler: Email sent successfully")
+            except Exception as e:
+                logger.error(f"Scheduler encountered error: {e}")
+                logger.error(traceback.format_exc())
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
 import pyodbc
 import pandas as pd
 import dash
@@ -27,6 +78,8 @@ import plotly.graph_objects as go
 import base64
 time.clock = time.time
 import webbrowser
+import threading
+import sched
 import logging
 import logging.handlers
 import subprocess
@@ -2323,6 +2376,11 @@ def main():
     logger.info(f"Opening dashboard at: {dashboard_url}")
     print(f"\nOpening dashboard at: {dashboard_url}")
     
+    # Also request opening via default webbrowser as an extra convenience
+    try:
+        webbrowser.open(dashboard_url)
+    except Exception:
+        pass
     browser_opened = open_browser_with_fallbacks(dashboard_url)
     
     print("\n" + "="*60)
@@ -2343,6 +2401,12 @@ def main():
         print(f"   • Manually navigate to: {dashboard_url}")
     
     logger.info("Dashboard startup completed - waiting for user input")
+    # Start background 2 AM scheduler
+    try:
+        schedule_daily_email()
+        logger.info("2 AM daily email scheduler started")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")
     
     try:
         # Simple approach - just wait for user to interrupt
