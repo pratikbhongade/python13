@@ -1,0 +1,25 @@
+{
+  "database_environments": {
+    "PROD": {
+      "SERVER": "SDC01ASRSQPD01S\\PSQLINST01",
+      "DATABASE": "ASPIRE",
+      "DISPLAY_NAME": "Production"
+    },
+    "IT": {
+      "SERVER": "SDC01ASRSQIT01S\\PSQLINST01",
+      "DATABASE": "ASPIRE",
+      "DISPLAY_NAME": "IT Environment"
+    },
+    "QV": {
+      "SERVER": "SDC01ASRSQQV01S\\PSQLINST01",
+      "DATABASE": "ASPIRE",
+      "DISPLAY_NAME": "QV Environment"
+    }
+  },
+  "email": {
+    "to": [
+      "Pratik_Bhongade@Keybank.com"
+    ],
+    "cc": []
+  }
+}
