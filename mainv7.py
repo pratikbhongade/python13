@@ -2269,17 +2269,15 @@ def main():
     logger.info(" ASPIRE DASHBOARD MAIN FUNCTION STARTED")
     logger.info("="*60)
     
-    print("="*60)
-    print(" AspireVision Dashboard Starting...")
-    print("="*60)
+    logger.info("%s", "="*60)
+    logger.info("AspireVision Dashboard Starting...")
+    logger.info("%s", "="*60)
     
     # Check if we're running from PyInstaller
     if hasattr(sys, '_MEIPASS'):
         logger.info("Running from PyInstaller executable")
-        print("Running from PyInstaller executable...")
     else:
         logger.info("Running from Python script")
-        print("Running from Python script...")
     
     # Log system information
     logger.info(f"Current working directory: {os.getcwd()}")
@@ -2301,39 +2299,32 @@ def main():
     
     if missing_deps:
         logger.error(f"Critical dependencies missing: {missing_deps}")
-        print(f"Missing dependencies: {missing_deps}")
-        input("Press Enter to exit...")
+        # Do not prompt for input when running headless; exit main
         return
     
     # Check for required files
     edge_driver_path = get_edge_driver_path()
     if not os.path.exists(edge_driver_path):
         logger.error(f"Edge driver not found at: {edge_driver_path}")
-        print(f"Warning: Edge driver not found. Email functionality may not work.")
+        logger.warning("Warning: Edge driver not found. Email functionality may not work.")
     else:
         logger.info(f"Edge driver found at: {edge_driver_path}")
     
     # Start the dashboard server directly (avoiding multiprocessing issues with PyInstaller)
     logger.info("Starting dashboard server...")
-    print("Starting dashboard server...")
     
     server_started = run_dash_server_directly()
     
     if not server_started:
         logger.error("Failed to start dashboard server")
-        print("Failed to start dashboard server")
-        print("\nTroubleshooting:")
-        print("1. Check if another application is using port 8050")
-        print("2. Try running as administrator")
-        print("3. Check Windows Firewall settings")
+        logger.error("Troubleshooting: Check if another application is using port 8050; try running as administrator; check Windows Firewall settings")
         if log_file_path:
-            print(f"4. Check the log file: {log_file_path}")
-        input("Press Enter to exit...")
+            logger.error(f"Check the log file: {log_file_path}")
+        # Exit main without waiting for console input
         return
     
     # Wait for server to start responding
     server_ready = False
-    print("Waiting for server to respond...")
     logger.info("Waiting for server to respond...")
     
     for i in range(30):  # Wait up to 30 seconds
@@ -2344,85 +2335,55 @@ def main():
             response = urllib.request.urlopen('http://127.0.0.1:8050/', timeout=3)
             if response.getcode() == 200:
                 logger.info("Dashboard server is ready and responding!")
-                print("Dashboard server is ready and responding!")
                 server_ready = True
                 break
         except Exception as e:
             logger.debug(f"Server not ready yet (attempt {i+1}): {e}")
-            if i < 29:  # Don't show dots for last attempt
-                print(".", end="", flush=True)
+            # keep silent while waiting; debug logged above
             continue
     
     if not server_ready:
         logger.error("Server failed to respond after 30 seconds")
-        print("\nServer failed to respond after 30 seconds")
-        
-        print("\nDiagnostic Information:")
-        print(f"  - PyInstaller Mode: {hasattr(sys, '_MEIPASS')}")
-        print(f"  - Log File: {log_file_path if log_file_path else 'Not available'}")
-        
-        print("\nTroubleshooting:")
-        print("1. Check if another application is using port 8050")
-        print("2. Verify database connection (SQL Server must be accessible)")
-        print("3. Check Windows Firewall settings")
-        print("4. Try running as administrator")
-        print("5. Check the log file for detailed error information")
+        logger.error("Diagnostic Information: PyInstaller Mode=%s, Log File=%s", hasattr(sys, '_MEIPASS'), log_file_path or 'Not available')
+        logger.error("Troubleshooting: Check port 8050, verify DB connectivity, check firewall, try running as administrator.")
         if log_file_path:
-            print(f"   Log file location: {log_file_path}")
-        
-        input("Press Enter to exit...")
+            logger.error(f"Log file location: {log_file_path}")
         return
     
     # Server is ready, now open browser
     dashboard_url = 'http://127.0.0.1:8050/'
     logger.info(f"Opening dashboard at: {dashboard_url}")
-    print(f"\nOpening dashboard at: {dashboard_url}")
     
     # Use our safer browser opener which avoids spawning a visible cmd window
     browser_opened = open_browser_with_fallbacks(dashboard_url)
     
-    print("\n" + "="*60)
-    print(" Dashboard Status:")
-    print(f"   URL: {dashboard_url}")
-    print(f"   Database: Connected")  # We know it's connected if we got this far
-    print(f"   Server: {'Running' if server_ready else 'Issues'}")
-    print(f"   Browser: {'Opened' if browser_opened else 'Manual required'}")
-    print(f"   Log File: {log_file_path if log_file_path else 'Not available'}")
-    print("="*60)
-    print("\nDashboard is now running!")
-    print("Instructions:")
-    print("   • Dashboard should be visible in your browser")
-    print("   • If not visible, check the URL above")
-    print("   • Press Ctrl+C to stop the dashboard")
-    print("   • Check the log file for debugging information")
-    if not browser_opened:
-        print(f"   • Manually navigate to: {dashboard_url}")
+    logger.info("%s", "="*60)
+    logger.info("Dashboard Status: URL=%s, Database=Connected, Server=%s, Browser=%s, Log File=%s", dashboard_url, ('Running' if server_ready else 'Issues'), ('Opened' if browser_opened else 'Manual required'), (log_file_path if log_file_path else 'Not available'))
+    logger.info("%s", "="*60)
+    logger.info("Dashboard is now running. If it is not visible, manually navigate to %s", dashboard_url)
     
-    logger.info("Dashboard startup completed - waiting for user input")
+    logger.info("Dashboard startup completed")
     # Start background 2 AM scheduler
     try:
         schedule_daily_email()
         logger.info("2 AM daily email scheduler started")
     except Exception as e:
         logger.error(f"Failed to start scheduler: {e}")
-    
+
     try:
-        # Simple approach - just wait for user to interrupt
-        print("\nPress Ctrl+C to stop the dashboard...")
+        # Run indefinitely until interrupted
         while True:
             time.sleep(1)
-                
+
     except KeyboardInterrupt:
         logger.info("Shutdown requested by user")
-        print("\n\nShutdown requested by user...")
     finally:
         logger.info("Dashboard stopped successfully")
-        print("Dashboard stopped successfully.")
-        
+
         # Final log entry
-        logger.info("="*60)
+        logger.info("%s", "="*60)
         logger.info(" ASPIRE DASHBOARD SESSION ENDED")
-        logger.info("="*60)
+        logger.info("%s", "="*60)
 
 # Prevent recursion in PyInstaller
 if __name__ == '__main__':
@@ -2431,9 +2392,9 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Fatal error in main: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        print(f"Fatal error: {e}")
-        input("Press Enter to exit...")
+        logger.error(f"Fatal error: {e}")
+        # Exit without waiting for console input
     except KeyboardInterrupt:
-        print("\nShutdown requested.")
+        logger.info("Shutdown requested.")
     finally:
-        print("Application ended.")
+        logger.info("Application ended.")
